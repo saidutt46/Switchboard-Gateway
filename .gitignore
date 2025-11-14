@@ -1,0 +1,105 @@
+# ============================================================================
+# Switchboard Gateway - .gitignore
+# ============================================================================
+
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.txt
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Build artifacts
+dist/
+build/
+
+# Docker volumes (if using local bind mounts)
+data/
+
+# Sensitive configuration
+secrets/
+*.key
+*.pem
+*.crt
+
+# Database dumps
+*.sql.gz
+*.dump
+
+# Python (for admin-api and analytics)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Python virtual environments
+admin-api/venv/
+analytics/venv/
+
+# Jupyter Notebooks (if used for analytics)
+.ipynb_checkpoints
+
+# Node modules (if using any JS tools)
+node_modules/
+package-lock.json
+yarn.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Local configuration overrides
+docker-compose.override.yml
+config.local.yaml
