@@ -10,7 +10,7 @@ from database import init_db, check_db_connection
 import redis
 
 # Import routers
-from routers import services
+from routers import services, routes
 
 # Configure logging
 logging.basicConfig(
@@ -76,6 +76,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(services.router, prefix="/services", tags=["Services"])
+app.include_router(routes.router, prefix="/routes", tags=["Routes"])
 
 
 @app.get("/")
