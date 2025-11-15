@@ -26,6 +26,8 @@ import (
 	"github.com/saidutt46/switchboard-gateway/internal/database"
 	"github.com/saidutt46/switchboard-gateway/internal/health"
 	"github.com/saidutt46/switchboard-gateway/internal/logging"
+	"github.com/saidutt46/switchboard-gateway/internal/proxy"
+	"github.com/saidutt46/switchboard-gateway/internal/router"
 )
 
 // Version information (set during build via ldflags)
@@ -94,13 +96,23 @@ func run() error {
 
 	log.Info().Msg("Database connection established")
 
-	// Load initial configuration from database
-	if err := loadGatewayConfig(repo); err != nil {
+	// Load routes and services from database
+	routes, services, err := loadGatewayConfig(repo)
+	if err != nil {
 		return fmt.Errorf("failed to load gateway configuration: %w", err)
 	}
 
+	// Create router
+	r := router.NewRouter(routes, services)
+
+	// Create HTTP transport for proxy
+	transport := proxy.NewTransport(nil) // nil = use defaults
+
+	// Create proxy
+	p := proxy.NewProxy(r, transport)
+
 	// Setup HTTP server
-	mux := setupRoutes(db, repo)
+	mux := setupRoutes(db, repo, p)
 
 	server := &http.Server{
 		Addr:         cfg.ServerAddress(),
@@ -117,7 +129,7 @@ func run() error {
 	go func() {
 		log.Info().
 			Str("address", cfg.ServerAddress()).
-			Msg("HTTP server starting")
+			Msg("🚀 Gateway ready - accepting requests")
 
 		serverErrors <- server.ListenAndServe()
 	}()
@@ -155,7 +167,7 @@ func run() error {
 }
 
 // setupRoutes configures all HTTP routes for the gateway.
-func setupRoutes(db *database.DB, repo *database.Repository) *http.ServeMux {
+func setupRoutes(db *database.DB, repo *database.Repository, p *proxy.Proxy) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -165,18 +177,15 @@ func setupRoutes(db *database.DB, repo *database.Repository) *http.ServeMux {
 	// Ready check endpoint (for Kubernetes)
 	mux.HandleFunc("/ready", healthHandler.Ready)
 
-	// Root endpoint
+	// All other requests go through the proxy
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// For now, return 404 for all other routes
-		// In Phase 3, this will be the proxy handler
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
+		// Skip proxy for health/ready endpoints
+		if r.URL.Path == "/health" || r.URL.Path == "/ready" {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"message":"Switchboard API Gateway","version":"%s","status":"running"}`, Version)
+		// Proxy all other requests
+		p.ServeHTTP(w, r)
 	})
 
 	return mux
@@ -184,13 +193,13 @@ func setupRoutes(db *database.DB, repo *database.Repository) *http.ServeMux {
 
 // loadGatewayConfig loads the gateway configuration from the database.
 // This includes services, routes, plugins, etc.
-func loadGatewayConfig(repo *database.Repository) error {
+func loadGatewayConfig(repo *database.Repository) ([]*database.Route, []*database.Service, error) {
 	ctx := context.Background()
 
 	// Load services
 	services, err := repo.GetServices(ctx, false) // Only enabled services
 	if err != nil {
-		return fmt.Errorf("failed to load services: %w", err)
+		return nil, nil, fmt.Errorf("failed to load services: %w", err)
 	}
 
 	log.Info().
@@ -200,27 +209,24 @@ func loadGatewayConfig(repo *database.Repository) error {
 	// Load routes
 	routes, err := repo.GetRoutes(ctx, false) // Only enabled routes
 	if err != nil {
-		return fmt.Errorf("failed to load routes: %w", err)
+		return nil, nil, fmt.Errorf("failed to load routes: %w", err)
 	}
 
 	log.Info().
 		Int("count", len(routes)).
 		Msg("Routes loaded from database")
 
-	// Load plugins
+	// Load plugins (for logging purposes - not used yet)
 	plugins, err := repo.GetPlugins(ctx, true) // Only enabled plugins
 	if err != nil {
-		return fmt.Errorf("failed to load plugins: %w", err)
+		return nil, nil, fmt.Errorf("failed to load plugins: %w", err)
 	}
 
 	log.Info().
 		Int("count", len(plugins)).
-		Msg("Plugins loaded from database")
+		Msg("Plugins loaded from database (not active yet)")
 
-	// TODO: Phase 3 - Build route tree from loaded routes
-	// TODO: Phase 7 - Initialize plugin chain
-
-	return nil
+	return routes, services, nil
 }
 
 // printBanner prints the application banner with version information.
