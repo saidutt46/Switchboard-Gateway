@@ -85,10 +85,18 @@ services:
   # Demo Backend - For Testing (httpbin)
   # ============================================================================
   demo-backend:
-    image: kennethreitz/httpbin
+    image: mccutchen/go-httpbin:v2.13.4
     container_name: switchboard-demo-backend
     ports:
-      - "8081:80"
+      - "8081:8080"
+    environment:
+      - MAX_DURATION=10s
+      - MAX_BODY_SIZE=1048576
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - switchboard-network
 

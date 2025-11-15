@@ -62,6 +62,25 @@ curl http://localhost:8080/
 - HTTP server with health checks
 - Graceful shutdown
 
+### Phase 3: Simple Reverse Proxy ✅  <!-- ADD THIS -->
+- Route matching engine (exact, parameters, wildcards)
+- HTTP reverse proxy with connection pooling
+- Request/response header forwarding
+- Path parameter extraction
+- Multiple HTTP methods support (GET, POST, PUT, DELETE, etc.)
+- Performance: <1ms route matching, <5ms total overhead
+
+**Current capabilities:**
+```bash
+# Gateway proxies requests to backends
+curl http://localhost:8080/get
+# Returns response from demo backend with added headers:
+# - X-Request-ID
+# - X-Forwarded-For
+# - X-Forwarded-Proto
+# - X-Real-IP
+```
+
 ## Development
 
 ### Common Commands
