@@ -159,3 +159,46 @@ class ConsumerResponse(ConsumerBase):
     
     class Config:
         from_attributes = True
+
+
+# ============================================================================
+# Plugin Schemas
+# ============================================================================
+
+class PluginBase(BaseModel):
+    """Base plugin schema with common fields."""
+    name: str = Field(..., min_length=1, max_length=50)
+    scope: str = Field(..., pattern="^(global|service|route|consumer)$")
+    service_id: Optional[UUID] = None
+    route_id: Optional[UUID] = None
+    consumer_id: Optional[UUID] = None
+    config: dict = Field(default={})
+    enabled: bool = Field(default=True)
+    priority: int = Field(default=100, ge=1, le=1000)
+
+
+class PluginCreate(PluginBase):
+    """Schema for creating a plugin."""
+    pass
+
+
+class PluginUpdate(BaseModel):
+    """Schema for updating a plugin (all fields optional)."""
+    name: Optional[str] = Field(None, min_length=1, max_length=50)
+    scope: Optional[str] = Field(None, pattern="^(global|service|route|consumer)$")
+    service_id: Optional[UUID] = None
+    route_id: Optional[UUID] = None
+    consumer_id: Optional[UUID] = None
+    config: Optional[dict] = None
+    enabled: Optional[bool] = None
+    priority: Optional[int] = Field(None, ge=1, le=1000)
+
+
+class PluginResponse(PluginBase):
+    """Schema for plugin response."""
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
