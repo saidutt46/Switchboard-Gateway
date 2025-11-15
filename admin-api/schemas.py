@@ -125,3 +125,37 @@ class HealthResponse(BaseModel):
     version: str
     database: str
     redis: str
+    
+# ============================================================================
+# Consumer Schemas
+# ============================================================================
+
+class ConsumerBase(BaseModel):
+    """Base consumer schema with common fields."""
+    username: str = Field(..., min_length=1, max_length=100)
+    email: Optional[str] = Field(None, max_length=255)
+    custom_id: Optional[str] = Field(None, max_length=100)
+    custom_metadata: Optional[dict] = Field(default={})
+
+
+class ConsumerCreate(ConsumerBase):
+    """Schema for creating a consumer."""
+    pass
+
+
+class ConsumerUpdate(BaseModel):
+    """Schema for updating a consumer (all fields optional)."""
+    username: Optional[str] = Field(None, min_length=1, max_length=100)
+    email: Optional[str] = Field(None, max_length=255)
+    custom_id: Optional[str] = Field(None, max_length=100)
+    custom_metadata: Optional[dict] = None
+
+
+class ConsumerResponse(ConsumerBase):
+    """Schema for consumer response."""
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
