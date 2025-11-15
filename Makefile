@@ -76,6 +76,16 @@ db-reset: ## Reset database (WARNING: destroys all data!)
 db-query: ## Run a SQL query (usage: make db-query SQL="SELECT * FROM services")
 	docker exec -it switchboard-postgres psql -U switchboard -d switchboard -c "$(SQL)"
 
+db-restore: ## Restore sample data to database
+	@echo "🔄 Restoring sample data..."
+	docker exec -i switchboard-postgres psql -U switchboard -d switchboard < schema.sql
+	@echo "✅ Sample data restored"
+
+db-setup-test: ## Setup database for testing with go-httpbin
+	@echo "🔧 Setting up test routes..."
+	@cat tests/manual/setup_test_routes.sql | docker exec -i switchboard-postgres psql -U switchboard -d switchboard
+	@echo "✅ Test routes configured"
+
 # ============================================================================
 # Redis Operations
 # ============================================================================
