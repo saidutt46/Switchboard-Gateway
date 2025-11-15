@@ -14,6 +14,8 @@ from models import (
     Consumer as ConsumerModel
 )
 from schemas import PluginCreate, PluginUpdate, PluginResponse
+from events import publish_plugin_change
+
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +152,13 @@ def create_plugin(
         db.add(db_plugin)
         db.commit()
         db.refresh(db_plugin)
+        
+        # Publish config change event
+        publish_plugin_change(db_plugin.id, "created", {
+            "name": db_plugin.name,
+            "scope": db_plugin.scope,
+            "priority": db_plugin.priority
+        })
         
         log_extra = {
             "plugin_id": str(db_plugin.id),
@@ -491,6 +500,12 @@ def update_plugin(
         db.commit()
         db.refresh(db_plugin)
         
+        # Publish config change event
+        publish_plugin_change(plugin_id, "updated", {
+            "name": db_plugin.name,
+            "updated_fields": list(update_data.keys())
+        })
+        
         logger.info(
             "Plugin updated successfully",
             extra={
@@ -548,6 +563,12 @@ def delete_plugin(
     try:
         db.delete(db_plugin)
         db.commit()
+        
+        # Publish config change event
+        publish_plugin_change(plugin_id, "deleted", {
+            "name": plugin_name,
+            "scope": plugin_scope
+        })
         
         logger.info(
             "Plugin deleted successfully",

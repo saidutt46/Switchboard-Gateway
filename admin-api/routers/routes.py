@@ -9,6 +9,7 @@ from uuid import UUID
 from database import get_db
 from models import Route as RouteModel, Service as ServiceModel
 from schemas import RouteCreate, RouteUpdate, RouteResponse
+from events import publish_route_change
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,13 @@ def create_route(
         db.add(db_route)
         db.commit()
         db.refresh(db_route)
+        
+        # Publish config change event
+        publish_route_change(db_route.id, "created", {
+            "name": db_route.name,
+            "paths": db_route.paths,
+            "service_id": str(db_route.service_id)
+        })
         
         logger.info(
             "Route created successfully",
@@ -263,6 +271,12 @@ def update_route(
         db.commit()
         db.refresh(db_route)
         
+        # Publish config change event
+        publish_route_change(route_id, "updated", {
+            "name": db_route.name,
+            "updated_fields": list(update_data.keys())
+        })
+        
         logger.info(
             "Route updated successfully",
             extra={
@@ -322,6 +336,12 @@ def delete_route(
     try:
         db.delete(db_route)
         db.commit()
+        
+        # Publish config change event
+        publish_route_change(route_id, "deleted", {
+            "name": route_name,
+            "service_id": service_id
+        })
         
         logger.info(
             "Route deleted successfully",

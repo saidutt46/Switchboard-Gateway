@@ -9,6 +9,8 @@ from uuid import UUID
 from database import get_db
 from models import Service as ServiceModel
 from schemas import ServiceCreate, ServiceUpdate, ServiceResponse
+from events import publish_service_change
+
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,13 @@ def create_service(
         db.add(db_service)
         db.commit()
         db.refresh(db_service)
+        
+        # Publish config change event
+        publish_service_change(db_service.id, "created", {
+            "name": db_service.name,
+            "host": db_service.host,
+            "port": db_service.port
+        })
         
         logger.info(
             "Service created successfully",
@@ -208,6 +217,12 @@ def update_service(
         db.commit()
         db.refresh(db_service)
         
+        # Publish config change event
+        publish_service_change(service_id, "updated", {
+            "name": db_service.name,
+            "updated_fields": list(update_data.keys())
+        })
+        
         logger.info(
             "Service updated successfully",
             extra={
@@ -266,6 +281,11 @@ def delete_service(
     try:
         db.delete(db_service)
         db.commit()
+        
+        # Publish config change event
+        publish_service_change(service_id, "deleted", {
+            "name": service_name
+        })
         
         logger.info(
             "Service deleted successfully",
