@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ============================================================================
   # PostgreSQL - Configuration Store
@@ -99,6 +97,36 @@ services:
       retries: 3
     networks:
       - switchboard-network
+  
+  # ============================================================================
+  # Admin API (FastAPI) - Gateway Configuration Management
+  # ============================================================================
+  admin-api:
+    build:
+      context: ./admin-api
+      dockerfile: Dockerfile
+    container_name: switchboard-admin-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://switchboard:switchboard_dev_password@postgres:5432/switchboard
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./admin-api:/app
+    networks:
+      - switchboard-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 # ============================================================================
 # Volumes

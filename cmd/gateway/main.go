@@ -16,17 +16,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 
 	"github.com/saidutt46/switchboard-gateway/internal/config"
 	"github.com/saidutt46/switchboard-gateway/internal/database"
+	"github.com/saidutt46/switchboard-gateway/internal/gateway"
 	"github.com/saidutt46/switchboard-gateway/internal/health"
 	"github.com/saidutt46/switchboard-gateway/internal/logging"
-	"github.com/saidutt46/switchboard-gateway/internal/proxy"
 	"github.com/saidutt46/switchboard-gateway/internal/router"
 )
 
@@ -68,6 +70,14 @@ func run() error {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
+	log.Info().
+		Str("environment", cfg.Environment).
+		Str("server_host", cfg.ServerHost).
+		Int("server_port", cfg.ServerPort).
+		Str("log_level", cfg.LogLevel).
+		Str("log_format", cfg.LogFormat).
+		Msg("Configuration loaded successfully")
+
 	// Setup logging
 	if err := logging.Setup(cfg.LogLevel, cfg.LogFormat); err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
@@ -96,23 +106,97 @@ func run() error {
 
 	log.Info().Msg("Database connection established")
 
-	// Load routes and services from database
-	routes, services, err := loadGatewayConfig(repo)
+	// Load initial configuration from database
+	routes, err := repo.GetRoutes(context.Background(), false)
 	if err != nil {
-		return fmt.Errorf("failed to load gateway configuration: %w", err)
+		return fmt.Errorf("failed to load routes: %w", err)
 	}
 
-	// Create router
-	r := router.NewRouter(routes, services)
+	services, err := repo.GetServices(context.Background(), false)
+	if err != nil {
+		return fmt.Errorf("failed to load services: %w", err)
+	}
 
-	// Create HTTP transport for proxy
-	transport := proxy.NewTransport(nil) // nil = use defaults
+	// Create router EARLY (before setupRoutes)
+	rt := router.NewRouter(routes, services)
 
-	// Create proxy
-	p := proxy.NewProxy(r, transport)
+	log.Info().
+		Int("routes", len(routes)).
+		Int("services", len(services)).
+		Msg("Router initialized")
+
+	// Load plugins (for future phases)
+	plugins, err := repo.GetPlugins(context.Background(), true)
+	if err != nil {
+		return fmt.Errorf("failed to load plugins: %w", err)
+	}
+
+	log.Info().
+		Int("count", len(plugins)).
+		Msg("Plugins loaded from database")
+
+	// Initialize Redis for hot reload
+	// Parse Redis URL or use direct address
+	redisAddr := "localhost:6379"
+	redisDB := 0
+
+	// If RedisURL is set, use it
+	if len(cfg.RedisURL) > 0 {
+		if strings.HasPrefix(cfg.RedisURL, "redis://") {
+			// Parse full Redis URL
+			opt, err := redis.ParseURL(cfg.RedisURL)
+			if err != nil {
+				log.Warn().
+					Err(err).
+					Str("url", cfg.RedisURL).
+					Msg("Failed to parse Redis URL, using default localhost:6379")
+			} else {
+				redisAddr = opt.Addr
+				redisDB = opt.DB
+				log.Debug().
+					Str("addr", redisAddr).
+					Int("db", redisDB).
+					Msg("Parsed Redis URL")
+			}
+		} else {
+			// Direct address format (host:port)
+			redisAddr = cfg.RedisURL
+		}
+	}
+
+	log.Debug().
+		Str("redis_addr", redisAddr).
+		Int("redis_db", redisDB).
+		Msg("Connecting to Redis")
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+		DB:   redisDB,
+	})
+	defer redisClient.Close()
+
+	ctx := context.Background()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Warn().Err(err).Msg("Redis connection failed - hot reload disabled")
+	} else {
+		log.Info().Msg("Redis connection established")
+
+		// Create gateway instance
+		gw := gateway.New(rt, repo)
+
+		// Start config watcher
+		watcher := config.NewWatcher(redisClient, gw)
+		go func() {
+			if err := watcher.Start(ctx); err != nil {
+				log.Error().Err(err).Msg("Config watcher stopped")
+			}
+		}()
+
+		log.Info().Msg("Config watcher started - hot reload enabled! 🔥")
+	}
 
 	// Setup HTTP server
-	mux := setupRoutes(db, repo, p)
+	mux := setupRoutes(db, repo, rt)
 
 	server := &http.Server{
 		Addr:         cfg.ServerAddress(),
@@ -129,7 +213,7 @@ func run() error {
 	go func() {
 		log.Info().
 			Str("address", cfg.ServerAddress()).
-			Msg("🚀 Gateway ready - accepting requests")
+			Msg("HTTP server starting")
 
 		serverErrors <- server.ListenAndServe()
 	}()
@@ -167,7 +251,7 @@ func run() error {
 }
 
 // setupRoutes configures all HTTP routes for the gateway.
-func setupRoutes(db *database.DB, repo *database.Repository, p *proxy.Proxy) *http.ServeMux {
+func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -177,15 +261,38 @@ func setupRoutes(db *database.DB, repo *database.Repository, p *proxy.Proxy) *ht
 	// Ready check endpoint (for Kubernetes)
 	mux.HandleFunc("/ready", healthHandler.Ready)
 
-	// All other requests go through the proxy
+	// Proxy handler - USE THE ROUTER!
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Skip proxy for health/ready endpoints
+		// Skip health/ready checks
 		if r.URL.Path == "/health" || r.URL.Path == "/ready" {
 			return
 		}
 
-		// Proxy all other requests
-		p.ServeHTTP(w, r)
+		// Match route using router
+		result, err := rt.Match(r)
+		if err != nil {
+			log.Debug().
+				Str("path", r.URL.Path).
+				Str("method", r.Method).
+				Msg("No route matched")
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+
+		log.Info().
+			Str("path", r.URL.Path).
+			Str("method", r.Method).
+			Str("route_id", result.Route.ID).
+			Str("service_id", result.Service.ID).
+			Msg("Route matched")
+
+		// For now, return success (Phase 3 will add actual proxying)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"matched":true,"route":"%s","service":"%s","params":%v}`,
+			result.Route.Name.String,
+			result.Service.Name,
+			result.PathParams)
 	})
 
 	return mux
@@ -193,13 +300,13 @@ func setupRoutes(db *database.DB, repo *database.Repository, p *proxy.Proxy) *ht
 
 // loadGatewayConfig loads the gateway configuration from the database.
 // This includes services, routes, plugins, etc.
-func loadGatewayConfig(repo *database.Repository) ([]*database.Route, []*database.Service, error) {
+func loadGatewayConfig(repo *database.Repository) error {
 	ctx := context.Background()
 
 	// Load services
 	services, err := repo.GetServices(ctx, false) // Only enabled services
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load services: %w", err)
+		return fmt.Errorf("failed to load services: %w", err)
 	}
 
 	log.Info().
@@ -209,24 +316,27 @@ func loadGatewayConfig(repo *database.Repository) ([]*database.Route, []*databas
 	// Load routes
 	routes, err := repo.GetRoutes(ctx, false) // Only enabled routes
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load routes: %w", err)
+		return fmt.Errorf("failed to load routes: %w", err)
 	}
 
 	log.Info().
 		Int("count", len(routes)).
 		Msg("Routes loaded from database")
 
-	// Load plugins (for logging purposes - not used yet)
+	// Load plugins
 	plugins, err := repo.GetPlugins(ctx, true) // Only enabled plugins
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load plugins: %w", err)
+		return fmt.Errorf("failed to load plugins: %w", err)
 	}
 
 	log.Info().
 		Int("count", len(plugins)).
-		Msg("Plugins loaded from database (not active yet)")
+		Msg("Plugins loaded from database")
 
-	return routes, services, nil
+	// TODO: Phase 3 onwards - Build route tree from loaded routes
+	// TODO: Phase 7 onwards - Initialize plugin chain
+
+	return nil
 }
 
 // printBanner prints the application banner with version information.
