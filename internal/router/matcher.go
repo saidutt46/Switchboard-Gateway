@@ -9,6 +9,7 @@ package router
 import (
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/saidutt46/switchboard-gateway/internal/database"
 )
 
@@ -48,6 +49,12 @@ func (m *Matcher) Match(path string) []*PathMatch {
 	var paramMatches []*PathMatch
 	var wildcardMatches []*PathMatch
 
+	log.Debug().
+		Str("component", "matcher").
+		Str("path", path).
+		Int("candidates", len(m.routes)).
+		Msg("Starting path match")
+
 	// Try to match against each route
 	for _, route := range m.routes {
 		// Skip disabled routes
@@ -62,6 +69,11 @@ func (m *Matcher) Match(path string) []*PathMatch {
 
 				// Categorize by match type
 				if m.isExactMatch(pattern) {
+					log.Debug().
+						Str("component", "matcher").
+						Str("path", path).
+						Str("pattern", pattern).
+						Msg("Path matched with parameters")
 					exactMatches = append(exactMatches, match)
 				} else if m.hasParameters(pattern) {
 					paramMatches = append(paramMatches, match)

@@ -86,6 +86,8 @@ db-setup-test: ## Setup database for testing with go-httpbin
 	@cat tests/manual/setup_test_routes.sql | docker exec -i switchboard-postgres psql -U switchboard -d switchboard
 	@echo "✅ Test routes configured"
 
+db-init: db-restore db-setup-test ## Initialize database with schema and test data
+
 # ============================================================================
 # Redis Operations
 # ============================================================================
@@ -160,6 +162,17 @@ test-race: ## Run tests with race detector
 	@echo "🏁 Running tests with race detector..."
 	go test ./... -race -v
 
+test-router: ## Test router package
+	@echo "🧪 Testing router..."
+	go test ./internal/router/... -v
+
+test-proxy: ## Test proxy package
+	@echo "🧪 Testing proxy..."
+	go test ./internal/proxy/... -v
+
+test-phase3: test-router test-proxy ## Test all Phase 3 components
+	@echo "✅ Phase 3 tests complete"
+
 # ============================================================================
 # Code Quality
 # ============================================================================
@@ -179,6 +192,15 @@ lint: ## Run linter (requires golangci-lint)
 	@which golangci-lint > /dev/null || (echo "❌ golangci-lint not installed. Run: brew install golangci-lint"; exit 1)
 	golangci-lint run
 	@echo "✅ Lint passed"
+
+# ============================================================================
+# Testing & Verification
+# ============================================================================
+
+load-test: ## Run load test with k6 (requires k6 installed)
+	@echo "🔥 Running load test..."
+	@which k6 > /dev/null || (echo "❌ k6 not installed. Run: brew install k6"; exit 1)
+	k6 run tests/load/simple.js
 
 # ============================================================================
 # Verification & Health Checks

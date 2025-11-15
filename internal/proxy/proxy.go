@@ -66,6 +66,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Str("request_id", requestID).
 		Str("method", r.Method).
 		Str("path", r.URL.Path).
+		Str("query", r.URL.RawQuery).
+		Str("client_ip", getClientIP(r)).
+		Int64("request_size", r.ContentLength).
+		Str("user_agent", r.UserAgent()).
 		Str("route_id", match.Route.ID).
 		Str("service_id", match.Service.ID).
 		Str("service_name", match.Service.Name).
