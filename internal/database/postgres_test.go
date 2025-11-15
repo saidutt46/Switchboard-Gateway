@@ -3,16 +3,24 @@ package database
 import (
 	"testing"
 	"time"
+
+	"github.com/saidutt46/switchboard-gateway/internal/config"
 )
 
 func TestConfig_Defaults(t *testing.T) {
-	cfg := Config{
-		DSN: "test-dsn",
+	cfg := config.DatabaseConfig{
+		DSN:          "test-dsn",
+		MaxOpenConns: 25,
+		MaxIdleConns: 5,
 	}
 
-	// Verify defaults would be applied by envconfig
+	// Verify config structure
 	if cfg.DSN != "test-dsn" {
 		t.Errorf("expected DSN to be 'test-dsn', got %s", cfg.DSN)
+	}
+
+	if cfg.MaxOpenConns != 25 {
+		t.Errorf("expected MaxOpenConns to be 25, got %d", cfg.MaxOpenConns)
 	}
 }
 

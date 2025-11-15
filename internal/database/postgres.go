@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"time"
 
-	// PostgreSQL driver
+	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/rs/zerolog/log"
+
+	"github.com/saidutt46/switchboard-gateway/internal/config"
 )
 
 // DB wraps the sql.DB connection pool and provides additional functionality.
@@ -24,25 +26,11 @@ type DB struct {
 	dsn  string
 }
 
-// Config holds database connection configuration.
-type Config struct {
-	DSN string `envconfig:"POSTGRES_DSN" required:"true"`
-
-	// Connection pool settings
-	MaxOpenConns    int           `envconfig:"DB_MAX_OPEN_CONNS" default:"25"`
-	MaxIdleConns    int           `envconfig:"DB_MAX_IDLE_CONNS" default:"5"`
-	ConnMaxLifetime time.Duration `envconfig:"DB_CONN_MAX_LIFETIME" default:"5m"`
-	ConnMaxIdleTime time.Duration `envconfig:"DB_CONN_MAX_IDLE_TIME" default:"5m"`
-
-	// Connection timeout
-	ConnectTimeout time.Duration `envconfig:"DB_CONNECT_TIMEOUT" default:"10s"`
-}
-
 // NewDB creates a new database connection pool with the provided configuration.
 //
 // It establishes a connection, configures the pool, and verifies connectivity.
 // Returns an error if connection fails or ping times out.
-func NewDB(cfg Config) (*DB, error) {
+func NewDB(cfg config.DatabaseConfig) (*DB, error) {
 	log.Info().
 		Str("component", "database").
 		Msg("Connecting to PostgreSQL...")
@@ -78,7 +66,7 @@ func NewDB(cfg Config) (*DB, error) {
 		Int("max_open_conns", cfg.MaxOpenConns).
 		Int("max_idle_conns", cfg.MaxIdleConns).
 		Dur("conn_max_lifetime", cfg.ConnMaxLifetime).
-		Msg("Database connection established")
+		Msg("Database connection established successfully")
 
 	return db, nil
 }
@@ -129,6 +117,12 @@ func (db *DB) Health(ctx context.Context) map[string]interface{} {
 	if err := db.Ping(ctx); err != nil {
 		health["status"] = "unhealthy"
 		health["error"] = err.Error()
+
+		log.Error().
+			Err(err).
+			Str("component", "database").
+			Msg("Database health check failed")
+
 		return health
 	}
 
@@ -144,6 +138,13 @@ func (db *DB) Health(ctx context.Context) map[string]interface{} {
 	health["max_idle_closed"] = stats.MaxIdleClosed
 	health["max_lifetime_closed"] = stats.MaxLifetimeClosed
 
+	log.Debug().
+		Str("component", "database").
+		Int("open_connections", stats.OpenConnections).
+		Int("in_use", stats.InUse).
+		Int("idle", stats.Idle).
+		Msg("Database health check passed")
+
 	return health
 }
 
@@ -157,12 +158,16 @@ func (db *DB) Close() error {
 		Msg("Closing database connection pool...")
 
 	if err := db.pool.Close(); err != nil {
+		log.Error().
+			Err(err).
+			Str("component", "database").
+			Msg("Error closing database pool")
 		return fmt.Errorf("failed to close database pool: %w", err)
 	}
 
 	log.Info().
 		Str("component", "database").
-		Msg("Database connection pool closed")
+		Msg("Database connection pool closed successfully")
 
 	return nil
 }
@@ -184,7 +189,16 @@ func (db *DB) Close() error {
 func (db *DB) Begin(ctx context.Context) (*sql.Tx, error) {
 	tx, err := db.pool.BeginTx(ctx, nil)
 	if err != nil {
+		log.Error().
+			Err(err).
+			Str("component", "database").
+			Msg("Failed to begin transaction")
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
+
+	log.Debug().
+		Str("component", "database").
+		Msg("Transaction started")
+
 	return tx, nil
 }
