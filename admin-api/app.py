@@ -9,6 +9,9 @@ from config import get_settings
 from database import init_db, check_db_connection
 import redis
 
+# Import routers
+from routers import services
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -71,6 +74,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(services.router, prefix="/services", tags=["Services"])
+
 
 @app.get("/")
 async def root():
@@ -104,7 +110,6 @@ async def health():
         "database": db_status,
         "redis": redis_status,
     }
-
 
 # TODO: Import and include routers here in next sessions
 # from routers import services, routes, consumers, plugins
