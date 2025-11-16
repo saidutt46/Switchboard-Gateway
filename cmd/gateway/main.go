@@ -2,12 +2,10 @@
 //
 // The gateway is a high-performance reverse proxy that sits between clients
 // and backend microservices, providing features like:
-// - Request routing and load balancing
-// - Authentication and authorization
-// - Rate limiting and traffic control
-// - Response caching
-// - Circuit breaking and resilience
-// - Observability and analytics
+// - Request routing with O(log n) radix tree matching
+// - Hot configuration reload via Redis pub/sub
+// - Health checks and monitoring
+// - Graceful shutdown handling
 package main
 
 import (
@@ -16,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -54,14 +51,8 @@ func run() error {
 	printBanner()
 
 	// Load .env file if it exists (optional - won't fail if missing)
-	// This allows local development with .env file
-	// Production should use actual environment variables
 	if err := godotenv.Load(); err != nil {
-		// Only log if file doesn't exist, don't fail
-		// In production, .env won't exist and that's fine
 		log.Debug().Msg("No .env file found, using environment variables")
-	} else {
-		log.Debug().Msg("Loaded configuration from .env file")
 	}
 
 	// Load configuration from environment variables
@@ -69,14 +60,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
-
-	log.Info().
-		Str("environment", cfg.Environment).
-		Str("server_host", cfg.ServerHost).
-		Int("server_port", cfg.ServerPort).
-		Str("log_level", cfg.LogLevel).
-		Str("log_format", cfg.LogFormat).
-		Msg("Configuration loaded successfully")
 
 	// Setup logging
 	if err := logging.Setup(cfg.LogLevel, cfg.LogFormat); err != nil {
@@ -97,14 +80,19 @@ func run() error {
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Error().Err(err).Msg("Error closing database connection")
+			log.Error().
+				Err(err).
+				Str("component", "database").
+				Msg("Error closing database connection")
 		}
 	}()
 
 	// Create repository
 	repo := database.NewRepository(db)
 
-	log.Info().Msg("Database connection established")
+	log.Info().
+		Str("component", "database").
+		Msg("Database connection established successfully")
 
 	// Load initial configuration from database
 	routes, err := repo.GetRoutes(context.Background(), false)
@@ -117,13 +105,17 @@ func run() error {
 		return fmt.Errorf("failed to load services: %w", err)
 	}
 
-	// Create router EARLY (before setupRoutes)
+	// Create router with radix tree
 	rt := router.NewRouter(routes, services)
 
+	// Log router statistics
+	stats := rt.Stats()
 	log.Info().
+		Str("component", "router").
 		Int("routes", len(routes)).
 		Int("services", len(services)).
-		Msg("Router initialized")
+		Interface("stats", stats).
+		Msg("Router initialized with radix tree")
 
 	// Load plugins (for future phases)
 	plugins, err := repo.GetPlugins(context.Background(), true)
@@ -132,67 +124,34 @@ func run() error {
 	}
 
 	log.Info().
+		Str("component", "plugins").
 		Int("count", len(plugins)).
 		Msg("Plugins loaded from database")
 
 	// Initialize Redis for hot reload
-	// Parse Redis URL or use direct address
-	redisAddr := "localhost:6379"
-	redisDB := 0
-
-	// If RedisURL is set, use it
-	if len(cfg.RedisURL) > 0 {
-		if strings.HasPrefix(cfg.RedisURL, "redis://") {
-			// Parse full Redis URL
-			opt, err := redis.ParseURL(cfg.RedisURL)
-			if err != nil {
-				log.Warn().
-					Err(err).
-					Str("url", cfg.RedisURL).
-					Msg("Failed to parse Redis URL, using default localhost:6379")
-			} else {
-				redisAddr = opt.Addr
-				redisDB = opt.DB
-				log.Debug().
-					Str("addr", redisAddr).
-					Int("db", redisDB).
-					Msg("Parsed Redis URL")
-			}
-		} else {
-			// Direct address format (host:port)
-			redisAddr = cfg.RedisURL
-		}
-	}
-
-	log.Debug().
-		Str("redis_addr", redisAddr).
-		Int("redis_db", redisDB).
-		Msg("Connecting to Redis")
-
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
-	defer redisClient.Close()
-
-	ctx := context.Background()
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Warn().Err(err).Msg("Redis connection failed - hot reload disabled")
+	redisClient, err := initializeRedis(cfg)
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Msg("Redis setup failed - hot reload disabled")
 	} else {
-		log.Info().Msg("Redis connection established")
-
-		// Create gateway instance
+		// Create gateway instance for config changes
 		gw := gateway.New(rt, repo)
 
-		// Start config watcher
+		// Start config watcher in background
 		watcher := config.NewWatcher(redisClient, gw)
 		go func() {
-			if err := watcher.Start(ctx); err != nil {
-				log.Error().Err(err).Msg("Config watcher stopped")
+			if err := watcher.Start(context.Background()); err != nil {
+				log.Error().
+					Err(err).
+					Str("component", "watcher").
+					Msg("Config watcher stopped")
 			}
 		}()
 
-		log.Info().Msg("Config watcher started - hot reload enabled! 🔥")
+		log.Info().
+			Str("component", "hot_reload").
+			Msg("Config watcher started - hot reload enabled 🔥")
 	}
 
 	// Setup HTTP server
@@ -250,6 +209,46 @@ func run() error {
 	return nil
 }
 
+// initializeRedis creates and tests Redis connection for hot reload.
+func initializeRedis(cfg *config.Config) (*redis.Client, error) {
+	log.Debug().
+		Str("component", "redis").
+		Msg("Initializing Redis connection")
+
+	// Parse Redis URL
+	opt, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		// Fallback to default if URL parsing fails
+		opt = &redis.Options{
+			Addr: "localhost:6379",
+			DB:   0,
+		}
+		log.Debug().
+			Err(err).
+			Str("fallback", opt.Addr).
+			Msg("Using default Redis address")
+	}
+
+	// Create client
+	client := redis.NewClient(opt)
+
+	// Test connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("redis ping failed: %w", err)
+	}
+
+	log.Info().
+		Str("component", "redis").
+		Str("addr", opt.Addr).
+		Msg("Redis connection established")
+
+	return client, nil
+}
+
 // setupRoutes configures all HTTP routes for the gateway.
 func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -268,26 +267,42 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) 
 			return
 		}
 
+		// Generate request ID
+		requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
+
 		// Match route using router
 		result, err := rt.Match(r)
 		if err != nil {
 			log.Debug().
+				Str("component", "proxy").
+				Str("request_id", requestID).
 				Str("path", r.URL.Path).
 				Str("method", r.Method).
 				Msg("No route matched")
+
 			http.Error(w, "Not Found", http.StatusNotFound)
 			return
 		}
 
+		// Log successful match
 		log.Info().
+			Str("component", "proxy").
+			Str("request_id", requestID).
 			Str("path", r.URL.Path).
 			Str("method", r.Method).
 			Str("route_id", result.Route.ID).
+			Str("route_name", result.Route.Name.String).
 			Str("service_id", result.Service.ID).
-			Msg("Route matched")
+			Str("service_name", result.Service.Name).
+			Interface("path_params", result.PathParams).
+			Msg("Route matched successfully")
 
-		// For now, return success (Phase 3 will add actual proxying)
+		// TODO: Phase 7 - Execute plugin chain here
+		// TODO: Phase 3 - Proxy to backend service here
+
+		// Temporary: Return match metadata for testing
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-ID", requestID)
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"matched":true,"route":"%s","service":"%s","params":%v}`,
 			result.Route.Name.String,
@@ -296,47 +311,6 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) 
 	})
 
 	return mux
-}
-
-// loadGatewayConfig loads the gateway configuration from the database.
-// This includes services, routes, plugins, etc.
-func loadGatewayConfig(repo *database.Repository) error {
-	ctx := context.Background()
-
-	// Load services
-	services, err := repo.GetServices(ctx, false) // Only enabled services
-	if err != nil {
-		return fmt.Errorf("failed to load services: %w", err)
-	}
-
-	log.Info().
-		Int("count", len(services)).
-		Msg("Services loaded from database")
-
-	// Load routes
-	routes, err := repo.GetRoutes(ctx, false) // Only enabled routes
-	if err != nil {
-		return fmt.Errorf("failed to load routes: %w", err)
-	}
-
-	log.Info().
-		Int("count", len(routes)).
-		Msg("Routes loaded from database")
-
-	// Load plugins
-	plugins, err := repo.GetPlugins(ctx, true) // Only enabled plugins
-	if err != nil {
-		return fmt.Errorf("failed to load plugins: %w", err)
-	}
-
-	log.Info().
-		Int("count", len(plugins)).
-		Msg("Plugins loaded from database")
-
-	// TODO: Phase 3 onwards - Build route tree from loaded routes
-	// TODO: Phase 7 onwards - Initialize plugin chain
-
-	return nil
 }
 
 // printBanner prints the application banner with version information.
