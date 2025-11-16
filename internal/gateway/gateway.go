@@ -7,20 +7,23 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/saidutt46/switchboard-gateway/internal/config"
 	"github.com/saidutt46/switchboard-gateway/internal/database"
+	"github.com/saidutt46/switchboard-gateway/internal/plugin" // ADD THIS
 	"github.com/saidutt46/switchboard-gateway/internal/router"
 )
 
 // Gateway handles HTTP proxying and config changes.
 type Gateway struct {
-	router *router.Router
-	repo   *database.Repository
+	router   *router.Router
+	repo     *database.Repository
+	registry *plugin.Registry
 }
 
 // New creates a new Gateway instance.
-func New(router *router.Router, repo *database.Repository) *Gateway {
+func New(router *router.Router, repo *database.Repository, registry *plugin.Registry) *Gateway {
 	return &Gateway{
-		router: router,
-		repo:   repo,
+		router:   router,
+		repo:     repo,
+		registry: registry,
 	}
 }
 
@@ -54,10 +57,25 @@ func (g *Gateway) handleRouteChange(event config.ConfigChangeEvent) error {
 		Str("route_id", event.EntityID).
 		Msg("Route change detected - reloading configuration")
 
-	// Use the router's existing Reload method
-	// It loads routes AND services from DB and does atomic swap
 	ctx := context.Background()
-	if err := g.router.Reload(ctx, g.repo); err != nil {
+
+	// Reload plugins first
+	var pluginInstances []plugin.PluginInstance
+	if g.registry != nil {
+		if err := g.registry.Reload(ctx, g.repo); err != nil {
+			log.Error().
+				Err(err).
+				Msg("Failed to reload plugins - continuing with empty plugins")
+			pluginInstances = []plugin.PluginInstance{}
+		} else {
+			pluginInstances = g.registry.GetInstances()
+		}
+	} else {
+		pluginInstances = []plugin.PluginInstance{}
+	}
+
+	// Reload router with new plugins
+	if err := g.router.Reload(ctx, g.repo, pluginInstances); err != nil {
 		log.Error().
 			Err(err).
 			Msg("Failed to reload routes")
@@ -75,9 +93,25 @@ func (g *Gateway) handleServiceChange(event config.ConfigChangeEvent) error {
 		Str("service_id", event.EntityID).
 		Msg("Service change detected - reloading configuration")
 
-	// Reload router (includes services)
 	ctx := context.Background()
-	if err := g.router.Reload(ctx, g.repo); err != nil {
+
+	// Reload plugins first
+	var pluginInstances []plugin.PluginInstance
+	if g.registry != nil {
+		if err := g.registry.Reload(ctx, g.repo); err != nil {
+			log.Error().
+				Err(err).
+				Msg("Failed to reload plugins - continuing with empty plugins")
+			pluginInstances = []plugin.PluginInstance{}
+		} else {
+			pluginInstances = g.registry.GetInstances()
+		}
+	} else {
+		pluginInstances = []plugin.PluginInstance{}
+	}
+
+	// Reload router with new plugins
+	if err := g.router.Reload(ctx, g.repo, pluginInstances); err != nil {
 		log.Error().
 			Err(err).
 			Msg("Failed to reload services")
@@ -90,11 +124,41 @@ func (g *Gateway) handleServiceChange(event config.ConfigChangeEvent) error {
 }
 
 func (g *Gateway) handlePluginChange(event config.ConfigChangeEvent) error {
-	// For now, just log it
-	// In Phase 7, we'll reload plugin configurations
 	log.Info().
 		Str("action", event.Action).
 		Str("plugin_id", event.EntityID).
-		Msg("Plugin change detected (no action needed yet)")
+		Msg("Plugin change detected - reloading configuration")
+
+	ctx := context.Background()
+
+	// Reload plugins
+	var pluginInstances []plugin.PluginInstance
+	if g.registry != nil {
+		if err := g.registry.Reload(ctx, g.repo); err != nil {
+			log.Error().
+				Err(err).
+				Msg("Failed to reload plugins")
+			return err
+		}
+		pluginInstances = g.registry.GetInstances()
+
+		log.Info().
+			Int("plugin_count", len(pluginInstances)).
+			Msg("Plugins reloaded successfully")
+	} else {
+		log.Warn().Msg("Plugin registry not available")
+		pluginInstances = []plugin.PluginInstance{}
+	}
+
+	// Reload router with new plugins
+	if err := g.router.Reload(ctx, g.repo, pluginInstances); err != nil {
+		log.Error().
+			Err(err).
+			Msg("Failed to reload configuration after plugin change")
+		return err
+	}
+
+	log.Info().Msg("Plugin configuration reloaded successfully")
+
 	return nil
 }

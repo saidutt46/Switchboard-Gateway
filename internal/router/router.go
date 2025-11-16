@@ -19,21 +19,24 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/saidutt46/switchboard-gateway/internal/database"
+	"github.com/saidutt46/switchboard-gateway/internal/plugin"
 )
 
 // Router handles request routing to backend services.
 type Router struct {
-	routes   []*database.Route
-	services map[string]*database.Service // service_id -> Service
-	matcher  *Matcher
-	mu       sync.RWMutex // Protects routes, services, and matcher during reload
+	routes       []*database.Route
+	services     map[string]*database.Service // service_id -> Service
+	matcher      *Matcher
+	mu           sync.RWMutex         // Protects routes, services, and matcher during reload
+	chainBuilder *plugin.ChainBuilder // Plugin chain builder
 }
 
-// MatchResult contains the result of a route match.
+// MatchResult contains the result of matching a request.
 type MatchResult struct {
 	Route      *database.Route
 	Service    *database.Service
-	PathParams map[string]string // Extracted path parameters (e.g., {"id": "123"})
+	PathParams map[string]string
+	Chain      *plugin.Chain
 }
 
 // NewRouter creates a new router from database routes and services.
@@ -41,7 +44,7 @@ type MatchResult struct {
 // Routes and services are loaded into memory for fast matching.
 // Uses a radix tree for O(log n) route lookups.
 // This should be called once at startup.
-func NewRouter(routes []*database.Route, services []*database.Service) *Router {
+func NewRouter(routes []*database.Route, services []*database.Service, pluginInstances []plugin.PluginInstance) *Router {
 	// Build service map for fast lookups
 	serviceMap := make(map[string]*database.Service)
 	for _, svc := range services {
@@ -60,18 +63,23 @@ func NewRouter(routes []*database.Route, services []*database.Service) *Router {
 		}
 	}
 
+	// Create plugin chain builder
+	chainBuilder := plugin.NewChainBuilder(pluginInstances)
+
 	log.Info().
 		Str("component", "router").
 		Int("routes", len(routes)).
 		Int("enabled_routes", enabledCount).
 		Int("services", len(services)).
 		Int("tree_size", matcher.Size()).
-		Msg("Router initialized with radix tree")
+		Int("plugins", len(pluginInstances)).
+		Msg("Router initialized with radix tree and plugins")
 
 	return &Router{
-		routes:   routes,
-		services: serviceMap,
-		matcher:  matcher,
+		routes:       routes,
+		services:     serviceMap,
+		matcher:      matcher,
+		chainBuilder: chainBuilder,
 	}
 }
 
@@ -84,7 +92,7 @@ func NewRouter(routes []*database.Route, services []*database.Service) *Router {
 //
 // Returns the matched route, service, and extracted path parameters.
 // Returns nil if no route matches.
-// Match finds a route that matches the given HTTP request.
+// Match finds a route that matches the given HTTP request and plugin chain.
 func (r *Router) Match(req *http.Request) (*MatchResult, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -153,10 +161,14 @@ func (r *Router) Match(req *http.Request) (*MatchResult, error) {
 			Str("path", path).
 			Msg("Route matched")
 
+			// Build plugin chain for this route
+		chain := r.chainBuilder.BuildForRoute(match.Route, service)
+
 		return &MatchResult{
-			Route:      route,
+			Route:      match.Route,
 			Service:    service,
 			PathParams: match.Params,
+			Chain:      chain, // NEW
 		}, nil
 	}
 
@@ -226,15 +238,15 @@ func (r *Router) hostMatchesPattern(host, pattern string) bool {
 	return false
 }
 
-// Reload reloads routes from the database.
+// Reload reloads routes and plugins from the database.
 //
-// This is called when routes are updated via the Admin API.
-// Rebuilds the radix tree with the new routes.
+// This is called when routes or plugins are updated via the Admin API.
+// Rebuilds the radix tree and plugin chains.
 // It's safe to call concurrently - uses write lock for atomic swap.
-func (r *Router) Reload(ctx context.Context, repo *database.Repository) error {
+func (r *Router) Reload(ctx context.Context, repo *database.Repository, pluginInstances []plugin.PluginInstance) error {
 	log.Info().
 		Str("component", "router").
-		Msg("Reloading routes from database")
+		Msg("Reloading routes and plugins from database")
 
 	// Load routes from database
 	routes, err := repo.GetRoutes(ctx, false) // Only enabled routes
@@ -268,11 +280,15 @@ func (r *Router) Reload(ctx context.Context, repo *database.Repository) error {
 		}
 	}
 
+	// Create new plugin chain builder
+	chainBuilder := plugin.NewChainBuilder(pluginInstances)
+
 	// Atomic swap (write lock in router)
 	r.mu.Lock()
 	r.routes = routes
 	r.services = serviceMap
 	r.matcher = matcher
+	r.chainBuilder = chainBuilder
 	r.mu.Unlock()
 
 	log.Info().
@@ -282,7 +298,8 @@ func (r *Router) Reload(ctx context.Context, repo *database.Repository) error {
 		Int("total_paths", totalPaths).
 		Int("services", len(services)).
 		Int("tree_size", matcher.Size()).
-		Msg("Routes reloaded successfully - radix tree rebuilt")
+		Int("plugins", len(pluginInstances)).
+		Msg("Routes and plugins reloaded successfully - radix tree rebuilt")
 
 	return nil
 }
