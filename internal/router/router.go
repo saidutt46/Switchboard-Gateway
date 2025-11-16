@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/rs/zerolog/log"
 
@@ -25,6 +26,7 @@ type Router struct {
 	routes   []*database.Route
 	services map[string]*database.Service // service_id -> Service
 	matcher  *Matcher
+	mu       sync.RWMutex // Protects routes, services, and matcher during reload
 }
 
 // MatchResult contains the result of a route match.
@@ -37,6 +39,7 @@ type MatchResult struct {
 // NewRouter creates a new router from database routes and services.
 //
 // Routes and services are loaded into memory for fast matching.
+// Uses a radix tree for O(log n) route lookups.
 // This should be called once at startup.
 func NewRouter(routes []*database.Route, services []*database.Service) *Router {
 	// Build service map for fast lookups
@@ -45,17 +48,25 @@ func NewRouter(routes []*database.Route, services []*database.Service) *Router {
 		serviceMap[svc.ID] = svc
 	}
 
-	// Create matcher for path matching
+	// Create matcher with radix tree
 	matcher := NewMatcher()
+
+	// Insert all routes into radix tree
+	enabledCount := 0
 	for _, route := range routes {
-		matcher.AddRoute(route)
+		if route.Enabled {
+			matcher.AddRoute(route)
+			enabledCount++
+		}
 	}
 
 	log.Info().
 		Str("component", "router").
 		Int("routes", len(routes)).
+		Int("enabled_routes", enabledCount).
 		Int("services", len(services)).
-		Msg("Router initialized")
+		Int("tree_size", matcher.Size()).
+		Msg("Router initialized with radix tree")
 
 	return &Router{
 		routes:   routes,
@@ -73,7 +84,11 @@ func NewRouter(routes []*database.Route, services []*database.Service) *Router {
 //
 // Returns the matched route, service, and extracted path parameters.
 // Returns nil if no route matches.
+// Match finds a route that matches the given HTTP request.
 func (r *Router) Match(req *http.Request) (*MatchResult, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	path := req.URL.Path
 	method := req.Method
 	host := req.Host
@@ -214,7 +229,8 @@ func (r *Router) hostMatchesPattern(host, pattern string) bool {
 // Reload reloads routes from the database.
 //
 // This is called when routes are updated via the Admin API.
-// It's safe to call concurrently as it creates a new matcher.
+// Rebuilds the radix tree with the new routes.
+// It's safe to call concurrently - uses write lock for atomic swap.
 func (r *Router) Reload(ctx context.Context, repo *database.Repository) error {
 	log.Info().
 		Str("component", "router").
@@ -238,30 +254,49 @@ func (r *Router) Reload(ctx context.Context, repo *database.Repository) error {
 		serviceMap[svc.ID] = svc
 	}
 
-	// Create new matcher
+	// Create new matcher with radix tree
 	matcher := NewMatcher()
+
+	// Build radix tree from routes
+	enabledCount := 0
+	totalPaths := 0
 	for _, route := range routes {
-		matcher.AddRoute(route)
+		if route.Enabled {
+			matcher.AddRoute(route)
+			enabledCount++
+			totalPaths += len(route.Paths)
+		}
 	}
 
-	// Atomic swap
+	// Atomic swap (write lock in router)
+	r.mu.Lock()
 	r.routes = routes
 	r.services = serviceMap
 	r.matcher = matcher
+	r.mu.Unlock()
 
 	log.Info().
 		Str("component", "router").
 		Int("routes", len(routes)).
+		Int("enabled_routes", enabledCount).
+		Int("total_paths", totalPaths).
 		Int("services", len(services)).
-		Msg("Routes reloaded successfully")
+		Int("tree_size", matcher.Size()).
+		Msg("Routes reloaded successfully - radix tree rebuilt")
 
 	return nil
 }
 
-// Stats returns router statistics.
+// Stats returns router statistics including radix tree metrics.
 func (r *Router) Stats() map[string]interface{} {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	return map[string]interface{}{
-		"routes":   len(r.routes),
-		"services": len(r.services),
+		"routes":        len(r.routes),
+		"services":      len(r.services),
+		"tree_size":     r.matcher.Size(),
+		"lookup_method": "radix_tree",
+		"complexity":    "O(log n)",
 	}
 }

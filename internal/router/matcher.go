@@ -1,14 +1,14 @@
-// Package router - Path matching logic
+// Package router - Path matching logic using radix tree
 //
 // This file implements path matching with support for:
 //   - Exact paths: /api/users
 //   - Parameters: /api/users/:id
 //   - Wildcards: /api/users/*
+//
+// Uses a radix tree for O(log n) performance instead of O(n) linear search.
 package router
 
 import (
-	"strings"
-
 	"github.com/rs/zerolog/log"
 	"github.com/saidutt46/switchboard-gateway/internal/database"
 )
@@ -19,165 +19,153 @@ type PathMatch struct {
 	Params map[string]string // Extracted path parameters
 }
 
-// Matcher handles path matching for routes.
+// Matcher handles path matching for routes using a radix tree.
 type Matcher struct {
-	routes []*database.Route
+	tree *RadixTree
 }
 
-// NewMatcher creates a new path matcher.
+// NewMatcher creates a new path matcher with an empty radix tree.
 func NewMatcher() *Matcher {
+	log.Debug().
+		Str("component", "matcher").
+		Msg("Creating new matcher with radix tree")
+
 	return &Matcher{
-		routes: make([]*database.Route, 0),
+		tree: NewRadixTree(),
 	}
 }
 
 // AddRoute adds a route to the matcher.
+//
+// Each path in the route is inserted into the radix tree.
+// Example:
+//
+//	route.Paths = ["/api/users", "/api/users/:id"]
+//	Both paths will be inserted and point to the same route.
 func (m *Matcher) AddRoute(route *database.Route) {
-	m.routes = append(m.routes, route)
+	if route == nil {
+		log.Warn().
+			Str("component", "matcher").
+			Msg("Attempted to add nil route")
+		return
+	}
+
+	if !route.Enabled {
+		log.Debug().
+			Str("component", "matcher").
+			Str("route_id", route.ID).
+			Msg("Skipping disabled route")
+		return
+	}
+
+	// Insert each path pattern into the radix tree
+	for _, pattern := range route.Paths {
+		m.tree.Insert(pattern, route)
+
+		log.Debug().
+			Str("component", "matcher").
+			Str("route_id", route.ID).
+			Str("pattern", pattern).
+			Int("tree_size", m.tree.Size()).
+			Msg("Route path added to radix tree")
+	}
 }
 
 // Match finds all routes that match the given path.
 //
-// Returns matches in priority order:
-//  1. Exact matches
-//  2. Parameter matches (/:id)
-//  3. Wildcard matches (/*)
+// With radix tree, we get the best match directly (O(log n)).
+// Returns matches in priority order (most specific first).
 //
-// Within each priority level, longer paths take precedence.
+// Example:
+//
+//	matches := matcher.Match("/api/users/123")
+//	// Returns route for /api/users/:id with params={"id": "123"}
 func (m *Matcher) Match(path string) []*PathMatch {
-	var exactMatches []*PathMatch
-	var paramMatches []*PathMatch
-	var wildcardMatches []*PathMatch
+	log.Debug().
+		Str("component", "matcher").
+		Str("path", path).
+		Msg("Matching path against radix tree")
+
+	// Search the radix tree (O(log n))
+	route, params := m.tree.Search(path)
+
+	// No match found
+	if route == nil {
+		log.Debug().
+			Str("component", "matcher").
+			Str("path", path).
+			Msg("No route matched in radix tree")
+		return nil
+	}
+
+	// Check if route is still enabled (defensive check)
+	if !route.Enabled {
+		log.Debug().
+			Str("component", "matcher").
+			Str("path", path).
+			Str("route_id", route.ID).
+			Msg("Matched route is disabled")
+		return nil
+	}
+
+	// Return single match (radix tree gives us the best match)
+	match := &PathMatch{
+		Route:  route,
+		Params: params,
+	}
 
 	log.Debug().
 		Str("component", "matcher").
 		Str("path", path).
-		Int("candidates", len(m.routes)).
-		Msg("Starting path match")
+		Str("route_id", route.ID).
+		Str("route_name", route.Name.String).
+		Interface("params", params).
+		Msg("Path matched successfully via radix tree")
 
-	// Try to match against each route
-	for _, route := range m.routes {
-		// Skip disabled routes
-		if !route.Enabled {
-			continue
-		}
-
-		// Try each path pattern in the route
-		for _, pattern := range route.Paths {
-			if match := m.matchPattern(path, pattern); match != nil {
-				match.Route = route
-
-				// Categorize by match type
-				if m.isExactMatch(pattern) {
-					log.Debug().
-						Str("component", "matcher").
-						Str("path", path).
-						Str("pattern", pattern).
-						Msg("Path matched with parameters")
-					exactMatches = append(exactMatches, match)
-				} else if m.hasParameters(pattern) {
-					paramMatches = append(paramMatches, match)
-				} else {
-					wildcardMatches = append(wildcardMatches, match)
-				}
-			}
-		}
-	}
-
-	// Return in priority order
-	result := make([]*PathMatch, 0)
-	result = append(result, exactMatches...)
-	result = append(result, paramMatches...)
-	result = append(result, wildcardMatches...)
-
-	return result
+	return []*PathMatch{match}
 }
 
-// matchPattern checks if a path matches a pattern and extracts parameters.
+// Clear removes all routes from the matcher.
 //
-// Pattern syntax:
-//   - Exact: /api/users
-//   - Parameter: /api/users/:id
-//   - Wildcard: /api/users/* (matches /api/users/anything but NOT /api/users)
-func (m *Matcher) matchPattern(path, pattern string) *PathMatch {
-	// Normalize paths (remove trailing slash)
-	path = strings.TrimSuffix(path, "/")
-	pattern = strings.TrimSuffix(pattern, "/")
+// This is useful when reloading all routes from the database.
+func (m *Matcher) Clear() {
+	log.Debug().
+		Str("component", "matcher").
+		Msg("Clearing all routes from radix tree")
 
-	// Empty paths match
-	if path == "" && pattern == "" {
-		return &PathMatch{Params: make(map[string]string)}
-	}
-
-	pathSegments := strings.Split(strings.Trim(path, "/"), "/")
-	patternSegments := strings.Split(strings.Trim(pattern, "/"), "/")
-
-	params := make(map[string]string)
-
-	// Check if pattern ends with wildcard
-	hasWildcard := len(patternSegments) > 0 && patternSegments[len(patternSegments)-1] == "*"
-
-	// Without wildcard, lengths must match exactly
-	if !hasWildcard && len(pathSegments) != len(patternSegments) {
-		return nil
-	}
-
-	// With wildcard, path must have at least as many segments as pattern
-	// (the wildcard needs at least one segment to match)
-	if hasWildcard && len(pathSegments) < len(patternSegments) {
-		return nil
-	}
-
-	// Match each segment
-	maxSegments := len(patternSegments)
-	if hasWildcard {
-		maxSegments-- // Don't process the wildcard itself
-	}
-
-	for i := 0; i < maxSegments; i++ {
-		patternSeg := patternSegments[i]
-
-		// Path ended but pattern continues (shouldn't happen due to check above)
-		if i >= len(pathSegments) {
-			return nil
-		}
-
-		pathSeg := pathSegments[i]
-
-		// Parameter segment (e.g., :id)
-		if strings.HasPrefix(patternSeg, ":") {
-			paramName := patternSeg[1:] // Remove ":"
-			params[paramName] = pathSeg
-			continue
-		}
-
-		// Exact match required
-		if pathSeg != patternSeg {
-			return nil
-		}
-	}
-
-	// If pattern has wildcard, we matched successfully
-	// (we already verified path has enough segments above)
-	if hasWildcard {
-		return &PathMatch{Params: params}
-	}
-
-	// For non-wildcard patterns, all segments must be consumed
-	return &PathMatch{Params: params}
+	m.tree.Clear()
 }
+
+// Size returns the number of route paths in the tree.
+func (m *Matcher) Size() int {
+	return m.tree.Size()
+}
+
+// ============================================================================
+// Legacy helper functions (kept for compatibility, but unused with radix tree)
+// ============================================================================
+
+// These functions were used in the old O(n) linear search implementation.
+// They're kept here for reference but are no longer used.
+// The radix tree handles all this logic internally.
 
 // isExactMatch returns true if the pattern is an exact match (no params or wildcards).
-func (m *Matcher) isExactMatch(pattern string) bool {
-	return !strings.Contains(pattern, ":") && !strings.Contains(pattern, "*")
+func isExactMatch(pattern string) bool {
+	// Static pattern: /api/users
+	_, paramName := getSegmentType(pattern)
+	return paramName == "" && pattern != "*"
 }
 
 // hasParameters returns true if the pattern has path parameters.
-func (m *Matcher) hasParameters(pattern string) bool {
-	return strings.Contains(pattern, ":")
+func hasParameters(pattern string) bool {
+	// Parameter pattern: /api/users/:id
+	segType, _ := getSegmentType(pattern)
+	return segType == param
 }
 
 // hasWildcard returns true if the pattern has a wildcard.
-func (m *Matcher) hasWildcard(pattern string) bool {
-	return strings.Contains(pattern, "*")
+func hasWildcard(pattern string) bool {
+	// Wildcard pattern: /api/users/*
+	segType, _ := getSegmentType(pattern)
+	return segType == wildcard
 }
