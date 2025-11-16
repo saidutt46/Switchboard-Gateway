@@ -28,6 +28,7 @@ import (
 	"github.com/saidutt46/switchboard-gateway/internal/logging"
 	"github.com/saidutt46/switchboard-gateway/internal/plugin"
 	"github.com/saidutt46/switchboard-gateway/internal/plugin/builtin"
+	"github.com/saidutt46/switchboard-gateway/internal/proxy"
 	"github.com/saidutt46/switchboard-gateway/internal/router"
 )
 
@@ -130,6 +131,38 @@ func run() error {
 		Interface("stats", stats).
 		Msg("Router initialized with radix tree and plugins")
 
+	// Create reverse proxy with HTTP transport configuration
+	transportConfig := &proxy.TransportConfig{
+		// Connection pool settings
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		MaxConnsPerHost:     100,
+
+		// Timeouts
+		DialTimeout:           30 * time.Second,
+		KeepAlive:             30 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+
+		// TLS
+		InsecureSkipVerify: false, // Verify TLS certificates in production
+	}
+
+	px := proxy.NewProxy(rt, proxy.NewTransport(transportConfig))
+
+	log.Info().
+		Str("component", "proxy").
+		Int("max_idle_conns", transportConfig.MaxIdleConns).
+		Int("max_idle_per_host", transportConfig.MaxIdleConnsPerHost).
+		Dur("idle_timeout", transportConfig.IdleConnTimeout).
+		Msg("Reverse proxy initialized with connection pooling")
+
+	log.Info().
+		Str("component", "proxy").
+		Msg("Reverse proxy initialized")
+
 	// Load plugins (for future phases)
 	plugins, err := repo.GetPlugins(context.Background(), true)
 	if err != nil {
@@ -168,7 +201,7 @@ func run() error {
 	}
 
 	// Setup HTTP server
-	mux := setupRoutes(db, repo, rt)
+	mux := setupRoutes(db, repo, rt, px)
 
 	server := &http.Server{
 		Addr:         cfg.ServerAddress(),
@@ -298,7 +331,7 @@ func initializeRedis(cfg *config.Config) (*redis.Client, error) {
 }
 
 // setupRoutes configures all HTTP routes for the gateway.
-func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) *http.ServeMux {
+func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router, px *proxy.Proxy) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -378,17 +411,28 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) 
 			return
 		}
 
-		// TODO: Phase 3 - Proxy to backend service here
-		// For now, return match metadata
+		// Proxy request to backend service
+		log.Debug().
+			Str("request_id", requestID).
+			Str("route", result.Route.Name.String).
+			Str("service", result.Service.Name).
+			Msg("Proxying request to backend")
 
-		// Temporary: Return match metadata for testing
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Request-ID", requestID)
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"matched":true,"route":"%s","service":"%s","params":%v}`,
-			result.Route.Name.String,
-			result.Service.Name,
-			result.PathParams)
+		// Get underlying ResponseWriter from plugin context
+		underlyingWriter := ctx.Response.ResponseWriter
+
+		// Proxy to backend (proxy will use router to match internally)
+		px.ServeHTTP(underlyingWriter, r)
+
+		// Execute plugin chain - AFTER response
+		ctx.Phase = plugin.PhaseAfterResponse
+		if err := result.Chain.Execute(ctx); err != nil {
+			log.Warn().
+				Err(err).
+				Str("request_id", requestID).
+				Msg("Plugin error in AfterResponse phase")
+			// Don't fail the request - response already sent
+		}
 
 		// Execute plugin chain - AFTER response (for logging, etc.)
 		ctx.Phase = plugin.PhaseAfterResponse

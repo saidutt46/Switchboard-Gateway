@@ -19,7 +19,7 @@ VALUES (
     "log_query_params": true,
     "excluded_paths": ["/health", "/ready"],
     "max_body_log_size": 0
-  }'::jsonb,
+  }',
   1,
   true
 );
@@ -41,7 +41,7 @@ VALUES (
     "exposed_headers": ["X-Request-ID"],
     "allow_credentials": false,
     "max_age": 86400
-  }'::jsonb,
+  }',
   5,
   true
 );
