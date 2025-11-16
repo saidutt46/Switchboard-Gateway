@@ -26,6 +26,9 @@ import (
 	"github.com/saidutt46/switchboard-gateway/internal/gateway"
 	"github.com/saidutt46/switchboard-gateway/internal/health"
 	"github.com/saidutt46/switchboard-gateway/internal/logging"
+	"github.com/saidutt46/switchboard-gateway/internal/plugin"
+	"github.com/saidutt46/switchboard-gateway/internal/plugin/builtin"
+	"github.com/saidutt46/switchboard-gateway/internal/proxy"
 	"github.com/saidutt46/switchboard-gateway/internal/router"
 )
 
@@ -105,8 +108,18 @@ func run() error {
 		return fmt.Errorf("failed to load services: %w", err)
 	}
 
-	// Create router with radix tree
-	rt := router.NewRouter(routes, services)
+	// Initialize plugin system
+	pluginRegistry, pluginInstances, err := initializePlugins(context.Background(), repo)
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Msg("Failed to initialize plugins - continuing without plugins")
+		pluginRegistry = nil
+		pluginInstances = []plugin.PluginInstance{} // Empty plugins
+	}
+
+	// Create router with radix tree and plugins
+	rt := router.NewRouter(routes, services, pluginInstances)
 
 	// Log router statistics
 	stats := rt.Stats()
@@ -114,8 +127,41 @@ func run() error {
 		Str("component", "router").
 		Int("routes", len(routes)).
 		Int("services", len(services)).
+		Int("plugins", len(pluginInstances)).
 		Interface("stats", stats).
-		Msg("Router initialized with radix tree")
+		Msg("Router initialized with radix tree and plugins")
+
+	// Create reverse proxy with HTTP transport configuration
+	transportConfig := &proxy.TransportConfig{
+		// Connection pool settings
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		MaxConnsPerHost:     100,
+
+		// Timeouts
+		DialTimeout:           30 * time.Second,
+		KeepAlive:             30 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+
+		// TLS
+		InsecureSkipVerify: false, // Verify TLS certificates in production
+	}
+
+	px := proxy.NewProxy(rt, proxy.NewTransport(transportConfig))
+
+	log.Info().
+		Str("component", "proxy").
+		Int("max_idle_conns", transportConfig.MaxIdleConns).
+		Int("max_idle_per_host", transportConfig.MaxIdleConnsPerHost).
+		Dur("idle_timeout", transportConfig.IdleConnTimeout).
+		Msg("Reverse proxy initialized with connection pooling")
+
+	log.Info().
+		Str("component", "proxy").
+		Msg("Reverse proxy initialized")
 
 	// Load plugins (for future phases)
 	plugins, err := repo.GetPlugins(context.Background(), true)
@@ -135,8 +181,8 @@ func run() error {
 			Err(err).
 			Msg("Redis setup failed - hot reload disabled")
 	} else {
-		// Create gateway instance for config changes
-		gw := gateway.New(rt, repo)
+		// Create gateway instance for config changes (with plugin registry for hot reload)
+		gw := gateway.New(rt, repo, pluginRegistry)
 
 		// Start config watcher in background
 		watcher := config.NewWatcher(redisClient, gw)
@@ -155,7 +201,7 @@ func run() error {
 	}
 
 	// Setup HTTP server
-	mux := setupRoutes(db, repo, rt)
+	mux := setupRoutes(db, repo, rt, px)
 
 	server := &http.Server{
 		Addr:         cfg.ServerAddress(),
@@ -209,6 +255,41 @@ func run() error {
 	return nil
 }
 
+// initializePlugins sets up the plugin registry and loads plugins.
+// Returns the registry and loaded plugin instances.
+func initializePlugins(ctx context.Context, repo *database.Repository) (*plugin.Registry, []plugin.PluginInstance, error) {
+	log.Info().
+		Str("component", "plugins").
+		Msg("Initializing plugin system")
+
+	// Create plugin registry
+	registry := plugin.NewRegistry()
+
+	// Register built-in plugins
+	registry.Register("request-logger", builtin.NewRequestLogger)
+	registry.Register("cors", builtin.NewCORSPlugin)
+
+	log.Info().
+		Str("component", "plugins").
+		Interface("registered", registry.GetRegisteredPlugins()).
+		Msg("Built-in plugins registered")
+
+	// Load plugin configurations from database
+	instances, err := registry.LoadFromDatabase(ctx, repo)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load plugins from database: %w", err)
+	}
+
+	// Log statistics
+	stats := registry.Stats()
+	log.Info().
+		Str("component", "plugins").
+		Interface("stats", stats).
+		Msg("Plugin system initialized successfully")
+
+	return registry, instances, nil
+}
+
 // initializeRedis creates and tests Redis connection for hot reload.
 func initializeRedis(cfg *config.Config) (*redis.Client, error) {
 	log.Debug().
@@ -250,7 +331,7 @@ func initializeRedis(cfg *config.Config) (*redis.Client, error) {
 }
 
 // setupRoutes configures all HTTP routes for the gateway.
-func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) *http.ServeMux {
+func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router, px *proxy.Proxy) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -295,19 +376,70 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router) 
 			Str("service_id", result.Service.ID).
 			Str("service_name", result.Service.Name).
 			Interface("path_params", result.PathParams).
+			Int("plugin_count", result.Chain.Count()).
 			Msg("Route matched successfully")
 
-		// TODO: Phase 7 - Execute plugin chain here
-		// TODO: Phase 3 - Proxy to backend service here
+		// Create plugin context
+		ctx := plugin.NewContext(
+			r,
+			w,
+			result.Route,
+			result.Service,
+			plugin.PhaseBeforeRequest,
+		)
 
-		// Temporary: Return match metadata for testing
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Request-ID", requestID)
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"matched":true,"route":"%s","service":"%s","params":%v}`,
-			result.Route.Name.String,
-			result.Service.Name,
-			result.PathParams)
+		// Execute plugin chain - BEFORE request
+		if err := result.Chain.Execute(ctx); err != nil {
+			log.Error().
+				Err(err).
+				Str("request_id", requestID).
+				Msg("Critical plugin failure - aborting request")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		// Check if plugin aborted the request
+		if ctx.IsAborted() {
+			log.Info().
+				Str("request_id", requestID).
+				Int("status_code", ctx.AbortStatusCode()).
+				Str("message", ctx.AbortMessage()).
+				Msg("Request aborted by plugin")
+
+			// Plugin already wrote response (e.g., preflight CORS)
+			// Just return
+			return
+		}
+
+		// Proxy request to backend service
+		log.Debug().
+			Str("request_id", requestID).
+			Str("route", result.Route.Name.String).
+			Str("service", result.Service.Name).
+			Msg("Proxying request to backend")
+
+		// Proxy to backend (use plugin's ResponseWriter to track size)
+		px.ServeHTTP(ctx.Response, r)
+
+		// Execute plugin chain - AFTER response
+		ctx.Phase = plugin.PhaseAfterResponse
+		if err := result.Chain.Execute(ctx); err != nil {
+			log.Warn().
+				Err(err).
+				Str("request_id", requestID).
+				Msg("Plugin error in AfterResponse phase")
+			// Don't fail the request - response already sent
+		}
+
+		// Execute plugin chain - AFTER response (for logging, etc.)
+		ctx.Phase = plugin.PhaseAfterResponse
+		if err := result.Chain.Execute(ctx); err != nil {
+			log.Warn().
+				Err(err).
+				Str("request_id", requestID).
+				Msg("Plugin error in AfterResponse phase")
+			// Don't fail the request - response already sent
+		}
 	})
 
 	return mux
