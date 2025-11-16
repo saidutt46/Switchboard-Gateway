@@ -1,243 +1,358 @@
-.PHONY: help setup up down restart logs clean test build run verify
+# Switchboard API Gateway - Makefile
+# Complete build and development automation
 
-# ============================================================================
-# Switchboard Gateway - Makefile
-# ============================================================================
+.PHONY: help build run test clean docker fmt lint vet deps dev db-setup db-migrate db-reset services-up services-down logs admin stress plugin-test coverage benchmark
 
-help: ## Show this help message
-	@echo "Switchboard Gateway - Available Commands:"
+# Variables
+BINARY_NAME=gateway
+MAIN_PATH=./cmd/gateway
+BUILD_DIR=./build
+VERSION?=$(shell git describe --tags --always --dirty)
+BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+GIT_COMMIT=$(shell git rev-parse --short HEAD)
+LDFLAGS=-ldflags "-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
+
+# Colors for output
+COLOR_RESET=\033[0m
+COLOR_BOLD=\033[1m
+COLOR_GREEN=\033[32m
+COLOR_YELLOW=\033[33m
+COLOR_BLUE=\033[34m
+
+##@ Help
+
+help: ## Display this help
+	@echo "$(COLOR_BOLD)Switchboard API Gateway - Makefile Commands$(COLOR_RESET)"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
-	@echo ""
+	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make $(COLOR_BLUE)<target>$(COLOR_RESET)\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  $(COLOR_BLUE)%-20s$(COLOR_RESET) %s\n", $$1, $$2 } /^##@/ { printf "\n$(COLOR_BOLD)%s$(COLOR_RESET)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-# ============================================================================
-# Setup & Infrastructure
-# ============================================================================
+##@ Development
 
-setup: ## Install Go dependencies
-	@echo "🔧 Installing dependencies..."
-	go mod download
-	go mod tidy
-	go mod verify
-	@echo "✅ Dependencies installed"
+dev: ## Run gateway in development mode with hot reload (requires air)
+	@echo "$(COLOR_GREEN)Starting gateway in development mode...$(COLOR_RESET)"
+	@air || (echo "$(COLOR_YELLOW)air not installed. Install with: go install github.com/cosmtrek/air@latest$(COLOR_RESET)" && go run $(MAIN_PATH))
 
-up: ## Start all services (PostgreSQL, Redis, Kafka)
-	@echo "🚀 Starting services..."
-	docker-compose up -d
-	@echo "⏳ Waiting for services..."
-	@sleep 10
-	@make verify
+run: build ## Build and run the gateway
+	@echo "$(COLOR_GREEN)Running gateway...$(COLOR_RESET)"
+	@./$(BUILD_DIR)/$(BINARY_NAME)
 
-down: ## Stop all services
-	@echo "🛑 Stopping services..."
-	docker-compose down
+run-debug: build ## Run gateway with debug logging
+	@echo "$(COLOR_GREEN)Running gateway with debug logging...$(COLOR_RESET)"
+	@LOG_LEVEL=debug ./$(BUILD_DIR)/$(BINARY_NAME)
 
-restart: ## Restart all services
-	@make down
-	@make up
+##@ Build
 
-logs: ## Show logs from all services
-	docker-compose logs -f
+build: ## Build the gateway binary
+	@echo "$(COLOR_GREEN)Building gateway...$(COLOR_RESET)"
+	@mkdir -p $(BUILD_DIR)
+	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@echo "$(COLOR_GREEN)✓ Build complete: $(BUILD_DIR)/$(BINARY_NAME)$(COLOR_RESET)"
 
-logs-postgres: ## Show PostgreSQL logs
-	docker-compose logs -f postgres
+build-linux: ## Build for Linux (production)
+	@echo "$(COLOR_GREEN)Building for Linux...$(COLOR_RESET)"
+	@mkdir -p $(BUILD_DIR)
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux $(MAIN_PATH)
+	@echo "$(COLOR_GREEN)✓ Linux build complete$(COLOR_RESET)"
 
-logs-redis: ## Show Redis logs
-	docker-compose logs -f redis
+build-mac: ## Build for macOS
+	@echo "$(COLOR_GREEN)Building for macOS...$(COLOR_RESET)"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin $(MAIN_PATH)
+	@echo "$(COLOR_GREEN)✓ macOS build complete$(COLOR_RESET)"
 
-logs-kafka: ## Show Kafka logs
-	docker-compose logs -f kafka
+build-windows: ## Build for Windows
+	@echo "$(COLOR_GREEN)Building for Windows...$(COLOR_RESET)"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME).exe $(MAIN_PATH)
+	@echo "$(COLOR_GREEN)✓ Windows build complete$(COLOR_RESET)"
 
-clean: ## Stop and remove all containers and volumes
-	@echo "🧹 Cleaning up..."
-	docker-compose down -v
-	rm -rf bin/
-	@echo "✅ Cleanup complete"
+build-all: build-linux build-mac build-windows ## Build for all platforms
 
-# ============================================================================
-# Database Operations
-# ============================================================================
+##@ Testing
 
-db-connect: ## Connect to PostgreSQL via psql
-	docker exec -it switchboard-postgres psql -U switchboard -d switchboard
+test: ## Run all unit tests
+	@echo "$(COLOR_GREEN)Running unit tests...$(COLOR_RESET)"
+	@go test -v ./...
 
-db-reset: ## Reset database (WARNING: destroys all data!)
-	@echo "⚠️  WARNING: This will destroy all data!"
+test-coverage: ## Run tests with coverage
+	@echo "$(COLOR_GREEN)Running tests with coverage...$(COLOR_RESET)"
+	@go test -coverprofile=coverage.out ./...
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "$(COLOR_GREEN)✓ Coverage report: coverage.html$(COLOR_RESET)"
+
+test-race: ## Run tests with race detection
+	@echo "$(COLOR_GREEN)Running tests with race detection...$(COLOR_RESET)"
+	@go test -race ./...
+
+test-router: ## Test router package only
+	@echo "$(COLOR_GREEN)Testing router package...$(COLOR_RESET)"
+	@go test -v ./internal/router
+
+test-plugin: ## Test plugin system
+	@echo "$(COLOR_GREEN)Testing plugin system...$(COLOR_RESET)"
+	@go test -v ./internal/plugin
+	@go test -v ./internal/plugin/builtin
+
+test-proxy: ## Test reverse proxy
+	@echo "$(COLOR_GREEN)Testing reverse proxy...$(COLOR_RESET)"
+	@go test -v ./internal/proxy
+
+##@ Load Testing (k6)
+
+stress-smoke: services-up ## Run smoke test (quick validation)
+	@echo "$(COLOR_GREEN)Running smoke test...$(COLOR_RESET)"
+	@k6 run tests/load/smoke.js
+
+stress-pool: services-up ## Run connection pool test
+	@echo "$(COLOR_GREEN)Running connection pool test...$(COLOR_RESET)"
+	@k6 run tests/load/connection_pool.js
+
+stress-full: services-up ## Run full gateway validation test
+	@echo "$(COLOR_GREEN)Running full gateway validation...$(COLOR_RESET)"
+	@k6 run tests/load/gateway_validation.js
+
+stress-all: stress-smoke stress-pool stress-full ## Run all load tests sequentially
+
+stress-custom: ## Run custom k6 test (usage: make stress-custom FILE=mytest.js VUS=50 DURATION=2m)
+	@echo "$(COLOR_GREEN)Running custom test: $(FILE)...$(COLOR_RESET)"
+	@k6 run $(if $(VUS),--vus $(VUS)) $(if $(DURATION),--duration $(DURATION)) tests/load/$(FILE)
+
+##@ Code Quality
+
+fmt: ## Format Go code
+	@echo "$(COLOR_GREEN)Formatting code...$(COLOR_RESET)"
+	@go fmt ./...
+	@echo "$(COLOR_GREEN)✓ Code formatted$(COLOR_RESET)"
+
+lint: ## Run golangci-lint
+	@echo "$(COLOR_GREEN)Running linter...$(COLOR_RESET)"
+	@golangci-lint run || (echo "$(COLOR_YELLOW)golangci-lint not installed. Install with: brew install golangci-lint$(COLOR_RESET)" && exit 1)
+
+vet: ## Run go vet
+	@echo "$(COLOR_GREEN)Running go vet...$(COLOR_RESET)"
+	@go vet ./...
+
+check: fmt vet lint test ## Run all code quality checks
+
+##@ Dependencies
+
+deps: ## Download Go dependencies
+	@echo "$(COLOR_GREEN)Downloading dependencies...$(COLOR_RESET)"
+	@go mod download
+	@echo "$(COLOR_GREEN)✓ Dependencies downloaded$(COLOR_RESET)"
+
+deps-tidy: ## Tidy Go dependencies
+	@echo "$(COLOR_GREEN)Tidying dependencies...$(COLOR_RESET)"
+	@go mod tidy
+	@echo "$(COLOR_GREEN)✓ Dependencies tidied$(COLOR_RESET)"
+
+deps-verify: ## Verify Go dependencies
+	@echo "$(COLOR_GREEN)Verifying dependencies...$(COLOR_RESET)"
+	@go mod verify
+	@echo "$(COLOR_GREEN)✓ Dependencies verified$(COLOR_RESET)"
+
+deps-update: ## Update all dependencies to latest
+	@echo "$(COLOR_GREEN)Updating dependencies...$(COLOR_RESET)"
+	@go get -u ./...
+	@go mod tidy
+	@echo "$(COLOR_GREEN)✓ Dependencies updated$(COLOR_RESET)"
+
+##@ Docker Services
+
+services-up: ## Start all Docker services (PostgreSQL, Redis, Kafka)
+	@echo "$(COLOR_GREEN)Starting Docker services...$(COLOR_RESET)"
+	@docker-compose up -d
+	@echo "$(COLOR_GREEN)✓ Services started$(COLOR_RESET)"
+	@make services-status
+
+services-down: ## Stop all Docker services
+	@echo "$(COLOR_GREEN)Stopping Docker services...$(COLOR_RESET)"
+	@docker-compose down
+	@echo "$(COLOR_GREEN)✓ Services stopped$(COLOR_RESET)"
+
+services-restart: ## Restart all Docker services
+	@echo "$(COLOR_GREEN)Restarting Docker services...$(COLOR_RESET)"
+	@docker-compose restart
+	@echo "$(COLOR_GREEN)✓ Services restarted$(COLOR_RESET)"
+
+services-status: ## Show status of Docker services
+	@echo "$(COLOR_BLUE)Docker Services Status:$(COLOR_RESET)"
+	@docker-compose ps
+
+services-logs: ## Tail logs from all services
+	@docker-compose logs -f
+
+services-clean: ## Stop and remove all containers and volumes
+	@echo "$(COLOR_YELLOW)⚠️  This will delete all data!$(COLOR_RESET)"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		docker-compose down postgres; \
-		docker volume rm switchboard-gateway_postgres_data 2>/dev/null || true; \
-		docker-compose up -d postgres; \
-		sleep 5; \
-		echo "✅ Database reset complete"; \
+		docker-compose down -v; \
+		echo "$(COLOR_GREEN)✓ Services cleaned$(COLOR_RESET)"; \
 	fi
 
-db-query: ## Run a SQL query (usage: make db-query SQL="SELECT * FROM services")
-	docker exec -it switchboard-postgres psql -U switchboard -d switchboard -c "$(SQL)"
+##@ Database
 
-db-restore: ## Restore sample data to database
-	@echo "🔄 Restoring sample data..."
-	docker exec -i switchboard-postgres psql -U switchboard -d switchboard < schema.sql
-	@echo "✅ Sample data restored"
+db-connect: ## Connect to PostgreSQL database
+	@docker exec -it switchboard-postgres psql -U switchboard -d switchboard
 
-db-setup-test: ## Setup database for testing with go-httpbin
-	@echo "🔧 Setting up test routes..."
-	@cat tests/manual/setup_test_routes.sql | docker exec -i switchboard-postgres psql -U switchboard -d switchboard
-	@echo "✅ Test routes configured"
+db-setup: ## Initialize database schema
+	@echo "$(COLOR_GREEN)Setting up database...$(COLOR_RESET)"
+	@docker exec -i switchboard-postgres psql -U switchboard -d switchboard < schema.sql
+	@echo "$(COLOR_GREEN)✓ Database schema created$(COLOR_RESET)"
 
-db-init: db-restore db-setup-test ## Initialize database with schema and test data
+db-test-data: ## Load test data (routes, services, plugins)
+	@echo "$(COLOR_GREEN)Loading test data...$(COLOR_RESET)"
+	@docker exec -i switchboard-postgres psql -U switchboard -d switchboard < tests/manual/setup_test_routes.sql
+	@docker exec -i switchboard-postgres psql -U switchboard -d switchboard < tests/manual/setup_test_plugins.sql
+	@echo "$(COLOR_GREEN)✓ Test data loaded$(COLOR_RESET)"
 
-# ============================================================================
-# Redis Operations
-# ============================================================================
+db-reset: ## Reset database (drop and recreate)
+	@echo "$(COLOR_YELLOW)⚠️  This will delete all data!$(COLOR_RESET)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		docker exec -i switchboard-postgres psql -U switchboard -d switchboard -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"; \
+		make db-setup; \
+		echo "$(COLOR_GREEN)✓ Database reset$(COLOR_RESET)"; \
+	fi
 
-redis-cli: ## Connect to Redis CLI
-	docker exec -it switchboard-redis redis-cli
+db-backup: ## Backup database to file
+	@echo "$(COLOR_GREEN)Backing up database...$(COLOR_RESET)"
+	@docker exec switchboard-postgres pg_dump -U switchboard switchboard > backup_$(shell date +%Y%m%d_%H%M%S).sql
+	@echo "$(COLOR_GREEN)✓ Database backed up$(COLOR_RESET)"
 
-redis-flush: ## Flush all Redis data
-	@echo "⚠️  Flushing Redis cache..."
-	docker exec -it switchboard-redis redis-cli FLUSHALL
-	@echo "✅ Redis flushed"
+db-restore: ## Restore database from backup (usage: make db-restore FILE=backup.sql)
+	@echo "$(COLOR_GREEN)Restoring database from $(FILE)...$(COLOR_RESET)"
+	@docker exec -i switchboard-postgres psql -U switchboard -d switchboard < $(FILE)
+	@echo "$(COLOR_GREEN)✓ Database restored$(COLOR_RESET)"
 
-# ============================================================================
-# Kafka Operations
-# ============================================================================
+db-query: ## Run SQL query (usage: make db-query SQL="SELECT * FROM routes")
+	@docker exec -it switchboard-postgres psql -U switchboard -d switchboard -c "$(SQL)"
 
-kafka-topics: ## List all Kafka topics
-	docker exec switchboard-kafka kafka-topics --bootstrap-server localhost:9092 --list
+##@ Redis
 
-kafka-create-topics: ## Create required Kafka topics
-	@echo "📋 Creating Kafka topics..."
-	docker exec switchboard-kafka kafka-topics --bootstrap-server localhost:9092 \
-		--create --if-not-exists --topic gateway.requests \
-		--partitions 6 --replication-factor 1
-	docker exec switchboard-kafka kafka-topics --bootstrap-server localhost:9092 \
-		--create --if-not-exists --topic gateway.errors \
-		--partitions 3 --replication-factor 1
-	@echo "✅ Topics created"
+redis-connect: ## Connect to Redis CLI
+	@docker exec -it switchboard-redis redis-cli
 
-# ============================================================================
-# Gateway Operations
-# ============================================================================
+redis-flush: ## Flush all Redis data (WARNING: destructive)
+	@echo "$(COLOR_YELLOW)⚠️  This will delete all Redis data!$(COLOR_RESET)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		docker exec -it switchboard-redis redis-cli FLUSHALL; \
+		echo "$(COLOR_GREEN)✓ Redis flushed$(COLOR_RESET)"; \
+	fi
 
-run: ## Run the gateway (loads .env automatically)
-	@echo "🚀 Starting Switchboard Gateway..."
-	go run cmd/gateway/main.go
+redis-monitor: ## Monitor Redis commands in real-time
+	@docker exec -it switchboard-redis redis-cli MONITOR
 
-run-dev: up run ## Start services and run gateway
+redis-stats: ## Show Redis statistics
+	@docker exec -it switchboard-redis redis-cli INFO stats
 
-build: ## Build the gateway binary
-	@echo "🔨 Building gateway..."
-	@mkdir -p bin
-	go build -o bin/gateway cmd/gateway/main.go
-	@echo "✅ Binary created: bin/gateway"
+##@ Admin API
 
-build-prod: ## Build production binary with version info
-	@echo "🔨 Building production binary..."
-	@mkdir -p bin
-	go build -ldflags "-X main.Version=0.2.0 -X main.BuildTime=$(shell date -u '+%Y-%m-%d_%H:%M:%S') -X main.GitCommit=$(shell git rev-parse --short HEAD)" -o bin/gateway cmd/gateway/main.go
-	@echo "✅ Production binary created: bin/gateway"
+admin-install: ## Install Admin API dependencies
+	@echo "$(COLOR_GREEN)Installing Admin API dependencies...$(COLOR_RESET)"
+	@cd admin-api && python3 -m venv venv && . venv/bin/activate && pip install -r requirements.txt
+	@echo "$(COLOR_GREEN)✓ Admin API dependencies installed$(COLOR_RESET)"
 
-install: build ## Install binary to $GOPATH/bin
-	@echo "📦 Installing gateway..."
-	go install cmd/gateway/main.go
-	@echo "✅ Installed to $(shell go env GOPATH)/bin/gateway"
+admin-run: ## Run Admin API
+	@echo "$(COLOR_GREEN)Starting Admin API...$(COLOR_RESET)"
+	@cd admin-api && . venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-# ============================================================================
-# Testing
-# ============================================================================
+admin-test: ## Test Admin API endpoints
+	@echo "$(COLOR_GREEN)Testing Admin API...$(COLOR_RESET)"
+	@./tests/manual/test_admin_api.sh
 
-test: ## Run all tests
-	@echo "🧪 Running tests..."
-	go test ./... -v
+##@ Plugin Development
 
-test-coverage: ## Generate test coverage report
-	@echo "📊 Generating coverage report..."
-	go test ./... -coverprofile=coverage.out
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "✅ Coverage report: coverage.html"
+plugin-list: ## List all registered plugins
+	@echo "$(COLOR_BLUE)Registered Plugins:$(COLOR_RESET)"
+	@docker exec -i switchboard-postgres psql -U switchboard -d switchboard -c "SELECT name, scope, priority, enabled FROM plugins ORDER BY priority;"
 
-test-race: ## Run tests with race detector
-	@echo "🏁 Running tests with race detector..."
-	go test ./... -race -v
+plugin-add-logger: ## Add request logger plugin (global)
+	@echo "$(COLOR_GREEN)Adding request logger plugin...$(COLOR_RESET)"
+	@docker exec -i switchboard-postgres psql -U switchboard -d switchboard << EOF
+	INSERT INTO plugins (name, scope, config, priority, enabled) \
+	VALUES ('request-logger', 'global', '{"critical":false,"log_headers":true,"log_query_params":true,"excluded_paths":["/health","/ready"]}'::jsonb, 1, true) \
+	ON CONFLICT (name, scope, COALESCE(service_id::text, ''), COALESCE(route_id::text, '')) DO NOTHING;
+	EOF
+	@echo "$(COLOR_GREEN)✓ Request logger plugin added$(COLOR_RESET)"
 
-test-router: ## Test router package
-	@echo "🧪 Testing router..."
-	go test ./internal/router/... -v
+plugin-add-cors: ## Add CORS plugin (global)
+	@echo "$(COLOR_GREEN)Adding CORS plugin...$(COLOR_RESET)"
+	@docker exec -i switchboard-postgres psql -U switchboard -d switchboard << EOF
+	INSERT INTO plugins (name, scope, config, priority, enabled) \
+	VALUES ('cors', 'global', '{"critical":false,"allowed_origins":["*"],"allowed_methods":["GET","POST","PUT","DELETE","PATCH","OPTIONS"],"allowed_headers":["Content-Type","Authorization"],"allow_credentials":false,"max_age":86400}'::jsonb, 5, true) \
+	ON CONFLICT (name, scope, COALESCE(service_id::text, ''), COALESCE(route_id::text, '')) DO NOTHING;
+	EOF
+	@echo "$(COLOR_GREEN)✓ CORS plugin added$(COLOR_RESET)"
 
-test-proxy: ## Test proxy package
-	@echo "🧪 Testing proxy..."
-	go test ./internal/proxy/... -v
+plugin-reload: ## Trigger hot reload of plugins
+	@echo "$(COLOR_GREEN)Triggering plugin reload...$(COLOR_RESET)"
+	@docker exec -it switchboard-redis redis-cli PUBLISH gateway:config:changes '{"entity_type":"plugin","entity_id":"*","action":"reload"}'
+	@echo "$(COLOR_GREEN)✓ Reload signal sent$(COLOR_RESET)"
 
-test-phase3: test-router test-proxy ## Test all Phase 3 components
-	@echo "✅ Phase 3 tests complete"
+##@ Docker
 
-# ============================================================================
-# Code Quality
-# ============================================================================
+docker-build: ## Build Docker image
+	@echo "$(COLOR_GREEN)Building Docker image...$(COLOR_RESET)"
+	@docker build -t switchboard-gateway:$(VERSION) .
+	@docker tag switchboard-gateway:$(VERSION) switchboard-gateway:latest
+	@echo "$(COLOR_GREEN)✓ Docker image built: switchboard-gateway:$(VERSION)$(COLOR_RESET)"
 
-fmt: ## Format code
-	@echo "💅 Formatting code..."
-	go fmt ./...
-	@echo "✅ Code formatted"
+docker-run: ## Run gateway in Docker container
+	@echo "$(COLOR_GREEN)Running gateway in Docker...$(COLOR_RESET)"
+	@docker run -d \
+		--name switchboard-gateway \
+		-p 8080:8080 \
+		--env-file .env \
+		switchboard-gateway:latest
+	@echo "$(COLOR_GREEN)✓ Gateway container started$(COLOR_RESET)"
 
-vet: ## Run go vet
-	@echo "🔍 Running go vet..."
-	go vet ./...
-	@echo "✅ Vet passed"
+docker-stop: ## Stop gateway Docker container
+	@docker stop switchboard-gateway || true
+	@docker rm switchboard-gateway || true
+	@echo "$(COLOR_GREEN)✓ Gateway container stopped$(COLOR_RESET)"
 
-lint: ## Run linter (requires golangci-lint)
-	@echo "🔍 Running linter..."
-	@which golangci-lint > /dev/null || (echo "❌ golangci-lint not installed. Run: brew install golangci-lint"; exit 1)
-	golangci-lint run
-	@echo "✅ Lint passed"
+##@ Performance
 
-# ============================================================================
-# Testing & Verification
-# ============================================================================
+benchmark: ## Run Go benchmarks
+	@echo "$(COLOR_GREEN)Running benchmarks...$(COLOR_RESET)"
+	@go test -bench=. -benchmem ./...
 
-load-test: ## Run load test with k6 (requires k6 installed)
-	@echo "🔥 Running load test..."
-	@which k6 > /dev/null || (echo "❌ k6 not installed. Run: brew install k6"; exit 1)
-	k6 run tests/load/simple.js
+profile-cpu: ## Profile CPU usage
+	@echo "$(COLOR_GREEN)Profiling CPU (30 seconds)...$(COLOR_RESET)"
+	@go test -cpuprofile=cpu.prof -bench=. ./...
+	@go tool pprof -http=:8081 cpu.prof
 
-# ============================================================================
-# Verification & Health Checks
-# ============================================================================
+profile-mem: ## Profile memory usage
+	@echo "$(COLOR_GREEN)Profiling memory...$(COLOR_RESET)"
+	@go test -memprofile=mem.prof -bench=. ./...
+	@go tool pprof -http=:8081 mem.prof
 
-verify: ## Verify all services are running
-	@echo "🔍 Verifying services..."
-	@echo -n "PostgreSQL: "
-	@docker exec switchboard-postgres pg_isready -U switchboard > /dev/null 2>&1 && echo "✅" || echo "❌"
-	@echo -n "Redis: "
-	@docker exec switchboard-redis redis-cli ping > /dev/null 2>&1 && echo "✅" || echo "❌"
-	@echo -n "Kafka: "
-	@docker exec switchboard-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1 && echo "✅" || echo "❌"
-	@echo -n "Demo Backend: "
-	@curl -s http://localhost:8081/status > /dev/null 2>&1 && echo "✅" || echo "❌"
+##@ Cleanup
 
-health: ## Check gateway health endpoint
-	@echo "🏥 Checking gateway health..."
-	@curl -s http://localhost:8080/health | jq '.' || echo "❌ Gateway not running or jq not installed"
+clean: ## Remove build artifacts
+	@echo "$(COLOR_GREEN)Cleaning build artifacts...$(COLOR_RESET)"
+	@rm -rf $(BUILD_DIR)
+	@rm -f coverage.out coverage.html
+	@rm -f *.prof
+	@echo "$(COLOR_GREEN)✓ Cleaned$(COLOR_RESET)"
 
-ready: ## Check gateway ready endpoint
-	@echo "✅ Checking gateway readiness..."
-	@curl -s http://localhost:8080/ready | jq '.' || echo "❌ Gateway not running or jq not installed"
+clean-all: clean services-clean ## Clean everything (build + Docker)
 
-# ============================================================================
-# Quick Start
-# ============================================================================
+##@ Quick Start
 
-start: up run ## Quick start: Start services and run gateway
+quickstart: services-up db-setup db-test-data build run ## Complete quickstart (setup + run)
 
-stop: ## Stop gateway and services
-	@echo "🛑 Stopping everything..."
-	@pkill -f "go run cmd/gateway/main.go" 2>/dev/null || true
-	@make down
+reset: services-down clean services-up db-setup db-test-data ## Reset everything
 
-# ============================================================================
-# Default Target
-# ============================================================================
+##@ Version
 
-.DEFAULT_GOAL := help
+version: ## Show version information
+	@echo "$(COLOR_BOLD)Switchboard API Gateway$(COLOR_RESET)"
+	@echo "Version:    $(VERSION)"
+	@echo "Build Time: $(BUILD_TIME)"
+	@echo "Git Commit: $(GIT_COMMIT)"
