@@ -418,11 +418,8 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router, 
 			Str("service", result.Service.Name).
 			Msg("Proxying request to backend")
 
-		// Get underlying ResponseWriter from plugin context
-		underlyingWriter := ctx.Response.ResponseWriter
-
-		// Proxy to backend (proxy will use router to match internally)
-		px.ServeHTTP(underlyingWriter, r)
+		// Proxy to backend (use plugin's ResponseWriter to track size)
+		px.ServeHTTP(ctx.Response, r)
 
 		// Execute plugin chain - AFTER response
 		ctx.Phase = plugin.PhaseAfterResponse
