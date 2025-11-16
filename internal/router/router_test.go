@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/saidutt46/switchboard-gateway/internal/database"
+	"github.com/saidutt46/switchboard-gateway/internal/plugin"
 )
 
 func TestRouter_MatchRequest(t *testing.T) {
@@ -26,8 +27,8 @@ func TestRouter_MatchRequest(t *testing.T) {
 		Enabled:   true,
 	}
 
-	// Create router
-	r := NewRouter([]*database.Route{route}, []*database.Service{service})
+	// Create router with empty plugin instances (testing router only, not plugins)
+	r := NewRouter([]*database.Route{route}, []*database.Service{service}, []plugin.PluginInstance{})
 
 	tests := []struct {
 		name       string
