@@ -2,6 +2,12 @@
 # Switchboard Gateway - .gitignore
 # ============================================================================
 
+# Test results and artifacts
+tests/results/
+*.json
+!schema.json
+!package.json
+
 # Binaries
 bin/
 *.exe

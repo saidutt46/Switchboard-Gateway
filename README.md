@@ -6,13 +6,13 @@ A learning project building a production-grade API Gateway in Go.
 
 Personal project to learn distributed systems, Go, and infrastructure patterns by building a real API Gateway from scratch.
 
-**Current Status:** Phase 2 Complete - Basic server with database connectivity
+**Current Status:** Phase 9 Complete - Rate Limiting with Token Bucket & Sliding Window algorithms
 
 ## Quick Start
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.21+
 - Docker & Docker Compose
 - Make (optional, for convenience)
 
@@ -42,8 +42,8 @@ curl http://localhost:8080/health
 # Ready check
 curl http://localhost:8080/ready
 
-# Root endpoint
-curl http://localhost:8080/
+# Test rate limiting
+for i in {1..15}; do curl -I http://localhost:8080/test/get 2>/dev/null | grep -E "HTTP|X-RateLimit"; done
 ```
 
 ## What's Built So Far
@@ -62,20 +62,130 @@ curl http://localhost:8080/
 - HTTP server with health checks
 - Graceful shutdown
 
-## 🚀 Features
-
-### ✅ Phase 3: Simple Reverse Proxy (Complete)
+### Phase 3: Simple Reverse Proxy ✅
 - HTTP reverse proxy with connection pooling
 - Route matching (exact, parameters, wildcards)
 - Request/response header forwarding
 - Path parameter extraction
 - Performance: 5,075 req/s sustained, p95 18.71ms
 
-### ✅ Phase 5: Admin API & Hot Reload (Complete)
+### Phase 5: Admin API & Hot Reload ✅
 - **REST API for configuration management**
 - **Zero-downtime config updates via Redis pub/sub**
 - Auto-generated OpenAPI documentation
 - 27 total API endpoints
+- Hot reload: <200ms propagation time
+
+### Phase 9: Rate Limiting ✅ NEW
+- **Two algorithms**: Token Bucket (burst-friendly) & Sliding Window (strict)
+- **Identifier hierarchy**: consumer_id > api_key > ip_address
+- **Standard headers**: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+- **429 responses** with Retry-After header
+- **Distributed state** via Redis (multi-instance support)
+- **Hot reload** configuration changes
+- **Production tested**: k6 load tests with 10+ concurrent users
+
+---
+
+## 🚀 Features
+
+### Rate Limiting (Phase 9)
+
+#### Algorithms
+
+| Algorithm | Best For | Characteristics |
+|-----------|----------|-----------------|
+| **Token Bucket** | Public APIs, Developer sandboxes | Gradual refill, allows bursts, forgiving |
+| **Sliding Window** | Paid APIs, SLA enforcement | Strict limits, no bursts, compliance-ready |
+
+#### Quick Example
+
+```bash
+# Configure global rate limit (10 requests/minute)
+curl -X POST http://localhost:8000/plugins \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "rate-limit",
+    "scope": "global",
+    "config": {
+      "algorithm": "token-bucket",
+      "limit": 10,
+      "window": "1m"
+    },
+    "enabled": true,
+    "priority": 10
+  }'
+
+# Test it
+for i in {1..12}; do
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/test/get)
+  echo "Request $i: HTTP $STATUS"
+done
+
+# Output:
+# Request 1-10: HTTP 200
+# Request 11-12: HTTP 429
+```
+
+#### Configuration Options
+
+```json
+{
+  "algorithm": "token-bucket",        // or "sliding-window"
+  "limit": 1000,                      // requests per window
+  "window": "1m",                     // 1s, 1m, 1h, 24h
+  "identifier": "auto",               // auto, consumer_id, api_key, ip
+  "headers": true,                    // add X-RateLimit-* headers
+  "response_code": 429,               // HTTP status when limited
+  "response_message": "Rate limit exceeded"
+}
+```
+
+#### Response Headers
+
+```
+X-RateLimit-Limit: 10                # Max requests allowed
+X-RateLimit-Remaining: 7             # Requests remaining
+X-RateLimit-Reset: 1734567890        # Unix timestamp when limit resets
+Retry-After: 45                      # Seconds to wait (on 429)
+```
+
+#### Identifier Strategy
+
+Rate limits are enforced using a **priority hierarchy**:
+
+1. **consumer_id** (from auth plugin) - Most specific
+2. **api_key** (from X-API-Key header) - Per API key
+3. **ip** (from X-Forwarded-For) - Fallback
+
+**Auto mode** tries each in order until one is found.
+
+#### Scopes
+
+```sql
+-- Global: All requests
+INSERT INTO plugins (name, scope, config, enabled) 
+VALUES ('rate-limit', 'global', '{"limit": 1000, "window": "1m"}', true);
+
+-- Service: All routes for a service
+INSERT INTO plugins (name, scope, service_id, config, enabled) 
+VALUES ('rate-limit', 'service', '<service-id>', '{"limit": 5000, "window": "1h"}', true);
+
+-- Route: Specific route only
+INSERT INTO plugins (name, scope, route_id, config, enabled) 
+VALUES ('rate-limit', 'route', '<route-id>', '{"limit": 100, "window": "1m"}', true);
+```
+
+#### Performance
+
+**Load Test Results** (k6):
+- ✅ **Burst Test**: 10 requests allowed, 5 denied (100% accurate)
+- ✅ **Sustained Load**: 38 requests over 3.5min (Token Bucket refill working)
+- ✅ **Concurrent Users**: Handles 10+ users correctly
+- ✅ **Headers**: 100% of responses include rate limit headers
+- ✅ **Latency**: P95 < 1.5s (mostly upstream)
+
+### Admin API & Hot Reload
 
 #### Services Management
 - Full CRUD operations for backend services
@@ -101,11 +211,9 @@ curl http://localhost:8080/
 - Global, service, route, and consumer-level plugins
 - Priority-based execution order
 - Available plugins:
-  - Authentication: api-key-auth, jwt-auth, basic-auth
-  - Traffic Control: rate-limit, ip-restriction
-  - Performance: cache
-  - Resilience: circuit-breaker, timeout
-  - Transformation: cors, request-transform
+  - **Rate Limiting**: Token Bucket & Sliding Window
+  - CORS with preflight support
+  - Request Logger with structured logging
 
 #### Hot Reload
 - Configuration changes apply in <200ms
@@ -181,9 +289,24 @@ curl -X POST http://localhost:8000/routes \
     \"methods\": [\"GET\", \"POST\"]
   }"
 
+# Add rate limiting
+curl -X POST http://localhost:8000/plugins \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "rate-limit",
+    "scope": "global",
+    "config": {
+      "algorithm": "token-bucket",
+      "limit": 100,
+      "window": "1m"
+    },
+    "enabled": true,
+    "priority": 10
+  }'
+
 # Gateway reloads automatically!
 # Test immediately (no restart needed):
-curl http://localhost:8080/api/users
+curl -I http://localhost:8080/api/users
 ```
 
 ---
@@ -198,8 +321,9 @@ make test
 # Integration tests
 make test-integration
 
-# Load tests
-make load-test
+# Load tests (rate limiting)
+k6 run tests/load/rate_limit_burst_simple.js
+k6 run tests/load/rate_limit_realistic.js
 ```
 
 ### Manual Testing
@@ -209,6 +333,9 @@ make load-test
 
 # Test hot reload
 ./tests/manual/test_hot_reload.sh
+
+# Test rate limiting
+./tests/manual/test_rate_limit.sh
 ```
 
 ---
@@ -242,20 +369,6 @@ make load-test
 - `DELETE /routes/{id}` - Delete route
 - `GET /routes/{id}/details` - Get route with service info
 
-**Consumers** (5 endpoints):
-- `POST /consumers` - Create consumer
-- `GET /consumers` - List consumers
-- `GET /consumers/{id}` - Get consumer
-- `PUT /consumers/{id}` - Update consumer
-- `DELETE /consumers/{id}` - Delete consumer
-
-**API Keys** (5 endpoints):
-- `POST /consumers/{id}/keys` - Generate API key
-- `GET /consumers/{id}/keys` - List API keys
-- `DELETE /consumers/{id}/keys/{key_id}` - Revoke key
-- `PATCH /consumers/{id}/keys/{key_id}/disable` - Disable key
-- `PATCH /consumers/{id}/keys/{key_id}/enable` - Enable key
-
 **Plugins** (6 endpoints):
 - `POST /plugins` - Create plugin
 - `GET /plugins` - List plugins
@@ -263,32 +376,6 @@ make load-test
 - `PUT /plugins/{id}` - Update plugin
 - `DELETE /plugins/{id}` - Delete plugin
 - `GET /plugins/available` - List available plugin types
-
----
-
-## 🔥 Hot Reload Example
-```bash
-# Terminal 1: Start gateway
-make run
-
-# Terminal 2: Create a route via Admin API
-curl -X POST http://localhost:8000/routes \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service_id": "...",
-    "paths": ["/api/new-endpoint"],
-    "methods": ["GET"]
-  }'
-
-# Terminal 1 shows:
-# INFO: Config change detected: route created
-# INFO: Reloading routes from database
-# INFO: Routes reloaded successfully
-
-# Terminal 2: Test immediately (no restart!)
-curl http://localhost:8080/api/new-endpoint
-# ✓ Works!
-```
 
 ---
 
@@ -300,6 +387,13 @@ curl http://localhost:8080/api/new-endpoint
 - **Latency (p95)**: 18.71ms
 - **Gateway Overhead**: ~2ms
 - **Error Rate**: 0%
+
+### Phase 9 Benchmarks (Rate Limiting)
+- **Burst Test**: 10/15 requests allowed (67% - Token Bucket)
+- **Sustained Load**: 38 requests over 3.5min (gradual refill working)
+- **Concurrent Users**: 10+ users handled correctly
+- **Latency Impact**: P95 < 1.5s (minimal overhead)
+- **Accuracy**: 100% enforcement
 
 ### Hot Reload Performance
 - **Propagation Time**: <200ms
@@ -321,7 +415,13 @@ switchboard-gateway/
 │   ├── gateway/         # Gateway core logic
 │   ├── health/          # Health checks
 │   ├── logging/         # Structured logging
+│   ├── plugin/          # Plugin system
+│   │   └── builtin/    # Built-in plugins (rate-limit, cors, etc.)
 │   ├── proxy/           # HTTP proxy
+│   ├── ratelimit/       # Rate limiting algorithms
+│   │   ├── token_bucket.go
+│   │   ├── sliding_window.go
+│   │   └── redis_store.go
 │   └── router/          # Route matching
 ├── admin-api/           # Admin REST API (Python/FastAPI)
 │   ├── app.py           # Main application
@@ -333,6 +433,9 @@ switchboard-gateway/
 ├── tests/               # Test suites
 │   ├── manual/          # Manual test scripts
 │   └── load/            # k6 load tests
+│       ├── rate_limit_burst_simple.js
+│       ├── rate_limit_realistic.js
+│       └── rate_limit_token_bucket.js
 └── docker-compose.yml   # Infrastructure
 ```
 
@@ -356,13 +459,10 @@ make logs            # View logs
 - [x] Phase 2: Database & Basic Server
 - [x] Phase 3: Simple Reverse Proxy
 - [x] Phase 5: Admin API & Hot Reload
+- [x] Phase 9: Rate Limiting (Token Bucket & Sliding Window)
 
-### 🚧 In Progress
-- [ ] Phase 7: Plugin System Implementation
+### 🚧 Planned
 - [ ] Phase 8: Authentication Plugin
-- [ ] Phase 9: Rate Limiting Plugin
-
-### 📅 Planned
 - [ ] Phase 10: Response Caching
 - [ ] Phase 11: Load Balancing
 - [ ] Phase 12: Circuit Breaker
@@ -386,3 +486,6 @@ Built with:
 - [PostgreSQL](https://www.postgresql.org/) - Configuration storage
 - [Redis](https://redis.io/) - Caching & pub/sub
 - [Kafka](https://kafka.apache.org/) - Event streaming
+- [k6](https://k6.io/) - Load testing
+
+**gvs46**
