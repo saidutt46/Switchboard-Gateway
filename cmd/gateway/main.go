@@ -268,6 +268,7 @@ func initializePlugins(ctx context.Context, repo *database.Repository) (*plugin.
 	// Register built-in plugins
 	registry.Register("request-logger", builtin.NewRequestLogger)
 	registry.Register("cors", builtin.NewCORSPlugin)
+	registry.Register("rate-limit", builtin.NewRateLimitPlugin) // ← ADD THIS LINE
 
 	log.Info().
 		Str("component", "plugins").
@@ -406,8 +407,12 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router, 
 				Str("message", ctx.AbortMessage()).
 				Msg("Request aborted by plugin")
 
-			// Plugin already wrote response (e.g., preflight CORS)
-			// Just return
+			// Check if response was already written (CORS preflight writes 204)
+			if !ctx.Response.Written() {
+				// Write the error response (e.g., 429 for rate limit)
+				w.WriteHeader(ctx.AbortStatusCode())
+				w.Write([]byte(ctx.AbortMessage()))
+			}
 			return
 		}
 
