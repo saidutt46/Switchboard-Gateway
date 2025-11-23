@@ -220,7 +220,7 @@ func validateRateLimitConfig(config RateLimitConfig) error {
 	}
 
 	// Validate identifier
-	validIdentifiers := []string{"consumer_id", "api_key", "ip", "auto"}
+	validIdentifiers := []string{"consumer_id", "api_key", "ip", "auto", "shared"}
 	valid = false
 	for _, id := range validIdentifiers {
 		if config.Identifier == id {
@@ -342,10 +342,17 @@ func (p *RateLimitPlugin) Execute(ctx *plugin.Context) error {
 // getIdentifier extracts the identifier for rate limiting.
 //
 // Hierarchy (configurable via config.Identifier):
-//  1. consumer_id (from authentication plugin)
-//  2. api_key (from X-API-Key header, hashed)
-//  3. ip (from X-Forwarded-For or RemoteAddr)
+//   - shared (all users share one bucket - total limit)
+//     1. consumer_id (from authentication plugin)
+//     2. api_key (from X-API-Key header, hashed)
+//     3. ip (from X-Forwarded-For or RemoteAddr)
 func (p *RateLimitPlugin) getIdentifier(ctx *plugin.Context) string {
+	// Shared bucket: all users share one bucket (total limit)
+	// Use case: "Service can handle 1000 req/min TOTAL"
+	if p.config.Identifier == "shared" {
+		return "shared"
+	}
+
 	// If specific identifier is requested, try that first
 	if p.config.Identifier != "auto" {
 		if id := p.tryGetIdentifier(ctx, p.config.Identifier); id != "" {
