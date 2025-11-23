@@ -28,7 +28,6 @@
 package builtin
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -368,7 +367,7 @@ func (p *RateLimitPlugin) getIdentifier(ctx *plugin.Context) string {
 
 	// Priority 2: API Key (from header, hashed for privacy)
 	if apiKey := ctx.Request.Header.Get("X-API-Key"); apiKey != "" {
-		hashedKey := hashAPIKey(apiKey)
+		hashedKey := hashAPIKeyShort(apiKey)
 		return "apikey:" + hashedKey
 	}
 
@@ -387,7 +386,7 @@ func (p *RateLimitPlugin) tryGetIdentifier(ctx *plugin.Context, identifierType s
 
 	case "api_key":
 		if apiKey := ctx.Request.Header.Get("X-API-Key"); apiKey != "" {
-			hashedKey := hashAPIKey(apiKey)
+			hashedKey := hashAPIKeyShort(apiKey)
 			return "apikey:" + hashedKey
 		}
 
@@ -397,14 +396,6 @@ func (p *RateLimitPlugin) tryGetIdentifier(ctx *plugin.Context, identifierType s
 	}
 
 	return ""
-}
-
-// hashAPIKey hashes an API key for privacy.
-//
-// We don't store raw API keys in Redis - we hash them first.
-func hashAPIKey(apiKey string) string {
-	hash := sha256.Sum256([]byte(apiKey))
-	return fmt.Sprintf("%x", hash[:8]) // Use first 8 bytes (16 hex chars)
 }
 
 // getClientIP extracts the client IP address from the request.

@@ -6,10 +6,11 @@
 //   - Creating plugin instances with their config
 //   - Validating plugin configurations
 //   - Managing plugin lifecycle
+//   - Injecting dependencies into plugins
 //
 // Plugin Registration:
 //
-//	registry := NewRegistry()
+//	registry := NewRegistry(repo, redis)
 //	registry.Register("auth", NewAuthPlugin)
 //	registry.Register("rate-limit", NewRateLimitPlugin)
 //
@@ -24,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/saidutt46/switchboard-gateway/internal/database"
 )
@@ -51,13 +53,30 @@ type Registry struct {
 
 	// instances holds all loaded plugin instances
 	instances []PluginInstance
+
+	// repo is the database repository for plugins that need database access
+	repo *database.Repository
+
+	// redis is the Redis client for plugins that need caching
+	redis *redis.Client
 }
 
-// NewRegistry creates a new plugin registry.
-func NewRegistry() *Registry {
+// NewRegistry creates a new plugin registry with dependency injection support.
+//
+// The repo and redis parameters will be injected into plugins that need them.
+// Plugins must implement a SetDependencies method to receive these.
+func NewRegistry(repo *database.Repository, redis *redis.Client) *Registry {
+	log.Debug().
+		Str("component", "plugin_registry").
+		Bool("repo_provided", repo != nil).
+		Bool("redis_provided", redis != nil).
+		Msg("Creating plugin registry with dependencies")
+
 	return &Registry{
 		factories: make(map[string]PluginFactory),
 		instances: make([]PluginInstance, 0),
+		repo:      repo,
+		redis:     redis,
 	}
 }
 
@@ -205,6 +224,19 @@ func (r *Registry) createInstance(config *database.Plugin) (PluginInstance, erro
 	if err != nil {
 		return PluginInstance{}, fmt.Errorf("factory failed to create plugin: %w", err)
 	}
+
+	// Inject dependencies if plugin supports it
+	// We use type assertion to check if plugin has SetDependencies method
+	if setter, ok := plugin.(interface {
+		SetDependencies(*database.Repository, *redis.Client)
+	}); ok {
+		setter.SetDependencies(r.repo, r.redis)
+		log.Debug().
+			Str("component", "plugin_registry").
+			Str("plugin", config.Name).
+			Msg("Dependencies injected into plugin")
+	}
+	// ✨ NEW CODE ENDS HERE ✨
 
 	// Verify plugin name matches
 	if plugin.Name() != config.Name {
