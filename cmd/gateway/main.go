@@ -273,6 +273,7 @@ func initializePlugins(ctx context.Context, repo *database.Repository, redisClie
 	registry.Register("rate-limit", builtin.NewRateLimitPlugin)
 	registry.Register("api-key-auth", builtin.NewAPIKeyAuthPlugin)
 	registry.Register("jwt-auth", builtin.NewJWTAuthPlugin)
+	registry.Register("cache", builtin.NewCachePlugin)
 
 	log.Info().
 		Str("component", "plugins").
@@ -431,16 +432,6 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router, 
 		px.ServeHTTP(ctx.Response, r)
 
 		// Execute plugin chain - AFTER response
-		ctx.Phase = plugin.PhaseAfterResponse
-		if err := result.Chain.Execute(ctx); err != nil {
-			log.Warn().
-				Err(err).
-				Str("request_id", requestID).
-				Msg("Plugin error in AfterResponse phase")
-			// Don't fail the request - response already sent
-		}
-
-		// Execute plugin chain - AFTER response (for logging, etc.)
 		ctx.Phase = plugin.PhaseAfterResponse
 		if err := result.Chain.Execute(ctx); err != nil {
 			log.Warn().

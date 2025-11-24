@@ -51,6 +51,7 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -175,6 +176,7 @@ type ResponseWriter struct {
 	written     bool
 	bodySize    int
 	headersSent bool
+	body        *bytes.Buffer
 }
 
 // NewResponseWriter creates a new ResponseWriter wrapper.
@@ -185,6 +187,7 @@ func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
 		written:        false,
 		bodySize:       0,
 		headersSent:    false,
+		body:           &bytes.Buffer{},
 	}
 }
 
@@ -209,6 +212,9 @@ func (w *ResponseWriter) Write(b []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 
+	// Capture body for plugins (e.g., caching)
+	w.body.Write(b)
+
 	n, err := w.ResponseWriter.Write(b)
 	w.bodySize += n
 	return n, err
@@ -227,6 +233,12 @@ func (w *ResponseWriter) BodySize() int {
 // Written returns true if WriteHeader has been called.
 func (w *ResponseWriter) Written() bool {
 	return w.written
+}
+
+// Body returns the captured response body.
+// Used by caching plugin to store response in cache.
+func (w *ResponseWriter) Body() []byte {
+	return w.body.Bytes()
 }
 
 // NewContext creates a new plugin context for a request.
