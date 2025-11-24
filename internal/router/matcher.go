@@ -140,32 +140,3 @@ func (m *Matcher) Clear() {
 func (m *Matcher) Size() int {
 	return m.tree.Size()
 }
-
-// ============================================================================
-// Legacy helper functions (kept for compatibility, but unused with radix tree)
-// ============================================================================
-
-// These functions were used in the old O(n) linear search implementation.
-// They're kept here for reference but are no longer used.
-// The radix tree handles all this logic internally.
-
-// isExactMatch returns true if the pattern is an exact match (no params or wildcards).
-func isExactMatch(pattern string) bool {
-	// Static pattern: /api/users
-	_, paramName := getSegmentType(pattern)
-	return paramName == "" && pattern != "*"
-}
-
-// hasParameters returns true if the pattern has path parameters.
-func hasParameters(pattern string) bool {
-	// Parameter pattern: /api/users/:id
-	segType, _ := getSegmentType(pattern)
-	return segType == param
-}
-
-// hasWildcard returns true if the pattern has a wildcard.
-func hasWildcard(pattern string) bool {
-	// Wildcard pattern: /api/users/*
-	segType, _ := getSegmentType(pattern)
-	return segType == wildcard
-}

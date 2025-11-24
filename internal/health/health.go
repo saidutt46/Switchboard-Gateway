@@ -129,7 +129,7 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 			Msg("Readiness check failed: database not reachable")
 
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"status":"not ready","reason":"database unavailable"}`))
+		_, _ = w.Write([]byte(`{"status":"not ready","reason":"database unavailable"}`))
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ready"}`))
+	_, _ = w.Write([]byte(`{"status":"ready"}`))
 }
 
 // getCheckStatus converts a health status to a check status.

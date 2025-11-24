@@ -324,7 +324,7 @@ func initializeRedis(cfg *config.Config) (*redis.Client, error) {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		client.Close()
+		_ = client.Close()
 		return nil, fmt.Errorf("redis ping failed: %w", err)
 	}
 
@@ -416,7 +416,7 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router, 
 			if !ctx.Response.Written() {
 				// Write the error response (e.g., 429 for rate limit)
 				w.WriteHeader(ctx.AbortStatusCode())
-				w.Write([]byte(ctx.AbortMessage()))
+				_, _ = w.Write([]byte(ctx.AbortMessage()))
 			}
 			return
 		}

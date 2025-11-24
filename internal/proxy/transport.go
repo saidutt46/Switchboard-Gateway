@@ -82,6 +82,8 @@ func NewTransport(cfg *TransportConfig) *http.Transport {
 
 		// TLS configuration
 		TLSClientConfig: &tls.Config{
+			// TLS verification is configurable; InsecureSkipVerify defaults to false
+			// #nosec G402 -- Configurable, not hardcoded to true
 			InsecureSkipVerify: cfg.InsecureSkipVerify,
 			MinVersion:         tls.VersionTLS12,
 		},

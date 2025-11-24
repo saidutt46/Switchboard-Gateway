@@ -243,6 +243,8 @@ func (tb *TokenBucket) GetState(ctx context.Context, identifier string) (map[str
 // Returns:
 //   - {1, remaining_tokens, reset_time} if allowed
 //   - {0, remaining_tokens, reset_time} if denied
+//
+// #nosec G101 -- This is a Lua script, not credentials
 const tokenBucketLuaScript = `
 -- Get current state
 local tokens = tonumber(redis.call('HGET', KEYS[1], 'tokens'))

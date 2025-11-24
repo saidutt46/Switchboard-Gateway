@@ -1,3 +1,5 @@
+//nolint:errcheck // Test cleanup errors are acceptable
+
 package proxy
 
 import (

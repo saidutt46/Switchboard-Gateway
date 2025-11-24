@@ -57,7 +57,7 @@ func NewDB(cfg config.DatabaseConfig) (*DB, error) {
 	defer cancel()
 
 	if err := db.Ping(ctx); err != nil {
-		pool.Close()
+		_ = pool.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 

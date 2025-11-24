@@ -36,9 +36,6 @@ func Setup(level string, format string) error {
 			TimeFormat: time.RFC3339,
 			NoColor:    false,
 		}
-	} else {
-		// JSON output (for production)
-		// Already defaults to JSON, no special configuration needed
 	}
 
 	// Create logger with timestamp

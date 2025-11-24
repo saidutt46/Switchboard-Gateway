@@ -226,7 +226,8 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, upstreamURL
 	if err != nil {
 		return fmt.Errorf("upstream request failed: %w", err)
 	}
-	defer resp.Body.Close()
+
+	defer func() { _ = resp.Body.Close() }()
 
 	upstreamLatency := time.Since(upstreamStart)
 

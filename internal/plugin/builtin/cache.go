@@ -334,7 +334,7 @@ func (p *CachePlugin) handleBeforeRequest(ctx *plugin.Context) error {
 
 	// Write status code and body
 	ctx.Response.WriteHeader(cached.StatusCode)
-	ctx.Response.Write(body)
+	_, _ = ctx.Response.Write(body)
 
 	// Abort the chain - we've served the cached response
 	// Use a special status to indicate cache hit (won't send error response)

@@ -15,7 +15,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create token bucket: 10 tokens, refill 2/second
 	tb := NewTokenBucket(store, TokenBucketConfig{
@@ -29,7 +29,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	identifier := "test-user-1"
 
 	// Clean up before test
-	tb.Reset(ctx, identifier)
+	_ = tb.Reset(ctx, identifier)
 
 	// Test 1: First 10 requests should succeed (burst)
 	for i := 0; i < 10; i++ {
@@ -65,7 +65,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	}
 
 	// Clean up
-	tb.Reset(ctx, identifier)
+	_ = tb.Reset(ctx, identifier)
 }
 
 // TestTokenBucket_Concurrent tests concurrent access.
@@ -76,7 +76,7 @@ func TestTokenBucket_Concurrent(t *testing.T) {
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	tb := NewTokenBucket(store, TokenBucketConfig{
 		Capacity:   100,
@@ -87,7 +87,7 @@ func TestTokenBucket_Concurrent(t *testing.T) {
 
 	ctx := context.Background()
 	identifier := "test-user-2"
-	tb.Reset(ctx, identifier)
+	_ = tb.Reset(ctx, identifier)
 
 	// Make 100 concurrent requests
 	results := make(chan bool, 100)
@@ -116,7 +116,7 @@ func TestTokenBucket_Concurrent(t *testing.T) {
 	}
 
 	// Clean up
-	tb.Reset(ctx, identifier)
+	_ = tb.Reset(ctx, identifier)
 }
 
 // TestCalculateRefillRate tests the helper function.

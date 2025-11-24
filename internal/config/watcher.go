@@ -44,7 +44,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 
 	// Subscribe to config changes channel
 	pubsub := w.redis.Subscribe(ctx, "gateway:config:changes")
-	defer pubsub.Close()
+	defer func() { _ = pubsub.Close() }()
 
 	// Wait for subscription to be confirmed
 	_, err := pubsub.Receive(ctx)

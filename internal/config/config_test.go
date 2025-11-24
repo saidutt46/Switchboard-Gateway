@@ -183,8 +183,8 @@ func TestConfig_ServerAddress(t *testing.T) {
 
 func TestConfig_Load(t *testing.T) {
 	// Set required environment variable
-	os.Setenv("POSTGRES_DSN", "postgres://localhost:5432/test")
-	defer os.Unsetenv("POSTGRES_DSN")
+	_ = os.Setenv("POSTGRES_DSN", "postgres://localhost:5432/test")
+	defer func() { _ = os.Unsetenv("POSTGRES_DSN") }()
 
 	cfg, err := Load()
 	if err != nil {

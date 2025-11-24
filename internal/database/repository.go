@@ -48,7 +48,7 @@ func (r *Repository) GetServices(ctx context.Context, includeDisabled bool) ([]*
 	if err != nil {
 		return nil, fmt.Errorf("failed to query services: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var services []*Service
 	for rows.Next() {
@@ -155,7 +155,7 @@ func (r *Repository) GetRoutes(ctx context.Context, includeDisabled bool) ([]*Ro
 	if err != nil {
 		return nil, fmt.Errorf("failed to query routes: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var routes []*Route
 	for rows.Next() {
@@ -224,7 +224,7 @@ func (r *Repository) GetRoutesByServiceID(ctx context.Context, serviceID string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query routes by service: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var routes []*Route
 	for rows.Next() {
@@ -375,7 +375,7 @@ func (r *Repository) GetPlugins(ctx context.Context, enabledOnly bool) ([]*Plugi
 	if err != nil {
 		return nil, fmt.Errorf("failed to query plugins: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var plugins []*Plugin
 	for rows.Next() {
@@ -445,7 +445,8 @@ func (r *Repository) GetPluginsByRouteID(ctx context.Context, routeID string) ([
 	if err != nil {
 		return nil, fmt.Errorf("failed to query plugins for route: %w", err)
 	}
-	defer rows.Close()
+
+	defer func() { _ = rows.Close() }()
 
 	var plugins []*Plugin
 	for rows.Next() {
@@ -486,7 +487,7 @@ func (r *Repository) GetServiceTargets(ctx context.Context, serviceID string) ([
 	if err != nil {
 		return nil, fmt.Errorf("failed to query service targets: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var targets []*ServiceTarget
 	for rows.Next() {

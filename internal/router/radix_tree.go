@@ -100,7 +100,7 @@ func (t *RadixTree) Insert(path string, route *database.Route) {
 				prefix:    segment,
 				children:  make([]*node, 0),
 				paramName: paramName,
-				priority:  uint32(len(segments) - i), // Longer paths have higher priority
+				priority:  uint32(len(segments) - i), // #nosec G115 -- i < len(segments) guaranteed by loop
 			}
 
 			current.children = append(current.children, newNode)
