@@ -97,6 +97,15 @@ func run() error {
 		Str("component", "database").
 		Msg("Database connection established successfully")
 
+	// Initialize Redis BEFORE plugins
+	redisClient, err := initializeRedis(cfg)
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Msg("Redis initialization failed - continuing without Redis features")
+		redisClient = nil // Continue without Redis
+	}
+
 	// Load initial configuration from database
 	routes, err := repo.GetRoutes(context.Background(), false)
 	if err != nil {
@@ -109,7 +118,7 @@ func run() error {
 	}
 
 	// Initialize plugin system
-	pluginRegistry, pluginInstances, err := initializePlugins(context.Background(), repo)
+	pluginRegistry, pluginInstances, err := initializePlugins(context.Background(), repo, redisClient)
 	if err != nil {
 		log.Warn().
 			Err(err).
@@ -152,6 +161,25 @@ func run() error {
 
 	px := proxy.NewProxy(rt, proxy.NewTransport(transportConfig))
 
+	// Setup gateway and config watcher (if Redis available)
+	if redisClient != nil {
+		gw := gateway.New(rt, repo, pluginRegistry)
+
+		watcher := config.NewWatcher(redisClient, gw)
+		go func() {
+			if err := watcher.Start(context.Background()); err != nil {
+				log.Error().
+					Err(err).
+					Str("component", "watcher").
+					Msg("Config watcher stopped")
+			}
+		}()
+
+		log.Info().
+			Str("component", "hot_reload").
+			Msg("Config watcher started - hot reload enabled 🔥")
+	}
+
 	log.Info().
 		Str("component", "proxy").
 		Int("max_idle_conns", transportConfig.MaxIdleConns).
@@ -173,32 +201,6 @@ func run() error {
 		Str("component", "plugins").
 		Int("count", len(plugins)).
 		Msg("Plugins loaded from database")
-
-	// Initialize Redis for hot reload
-	redisClient, err := initializeRedis(cfg)
-	if err != nil {
-		log.Warn().
-			Err(err).
-			Msg("Redis setup failed - hot reload disabled")
-	} else {
-		// Create gateway instance for config changes (with plugin registry for hot reload)
-		gw := gateway.New(rt, repo, pluginRegistry)
-
-		// Start config watcher in background
-		watcher := config.NewWatcher(redisClient, gw)
-		go func() {
-			if err := watcher.Start(context.Background()); err != nil {
-				log.Error().
-					Err(err).
-					Str("component", "watcher").
-					Msg("Config watcher stopped")
-			}
-		}()
-
-		log.Info().
-			Str("component", "hot_reload").
-			Msg("Config watcher started - hot reload enabled 🔥")
-	}
 
 	// Setup HTTP server
 	mux := setupRoutes(db, repo, rt, px)
@@ -255,20 +257,22 @@ func run() error {
 	return nil
 }
 
-// initializePlugins sets up the plugin registry and loads plugins.
+// initializePlugins loads and initializes the plugin system.
 // Returns the registry and loaded plugin instances.
-func initializePlugins(ctx context.Context, repo *database.Repository) (*plugin.Registry, []plugin.PluginInstance, error) {
+func initializePlugins(ctx context.Context, repo *database.Repository, redisClient *redis.Client) (*plugin.Registry, []plugin.PluginInstance, error) {
 	log.Info().
 		Str("component", "plugins").
 		Msg("Initializing plugin system")
 
-	// Create plugin registry
-	registry := plugin.NewRegistry()
+	// Create plugin registry WITH dependencies
+	registry := plugin.NewRegistry(repo, redisClient)
 
 	// Register built-in plugins
 	registry.Register("request-logger", builtin.NewRequestLogger)
 	registry.Register("cors", builtin.NewCORSPlugin)
-	registry.Register("rate-limit", builtin.NewRateLimitPlugin) // ← ADD THIS LINE
+	registry.Register("rate-limit", builtin.NewRateLimitPlugin)
+	registry.Register("api-key-auth", builtin.NewAPIKeyAuthPlugin)
+	registry.Register("jwt-auth", builtin.NewJWTAuthPlugin)
 
 	log.Info().
 		Str("component", "plugins").

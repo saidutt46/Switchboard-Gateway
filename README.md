@@ -89,6 +89,77 @@ for i in {1..15}; do curl -I http://localhost:8080/test/get 2>/dev/null | grep -
 
 ## 🚀 Features
 
+### 🔐 Authentication
+Multiple authentication methods with flexible configuration:
+#### API Key Authentication
+- SHA256-hashed keys for security
+- Support for header (`X-API-Key`) or query parameter (`apikey`)
+- Redis caching (5-minute TTL)
+- Consumer identification and context injection
+- Configurable bypass paths
+**Setup:**
+```bash
+# Create consumer
+curl -X POST http://localhost:3000/api/consumers \
+  -H "Content-Type: application/json" \
+  -d '{"username": "partner-corp", "email": "api@partner.com"}'
+# Generate API key (returned on consumer creation)
+# Store the key hash in database
+# Configure plugin
+curl -X POST http://localhost:3000/api/plugins \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "api-key-auth",
+    "scope": "global",
+    "config": {
+      "key_names": ["X-API-Key", "apikey"],
+      "key_in_header": true,
+      "key_in_query": true,
+      "cache_ttl_seconds": 300
+    },
+    "priority": 5,
+    "enabled": true
+  }'
+# Test
+curl -H "X-API-Key: your-key-here" http://localhost:8080/api/endpoint
+JWT Authentication
+  • Token validation with configurable algorithms (HS256)
+  • Claims validation (exp, nbf, iss, aud)
+  • Support for Authorization Bearer header or cookies
+  • Redis caching with TTL respecting token expiration
+  • User context injection
+Setup:
+# Configure plugin
+curl -X POST http://localhost:3000/api/plugins \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "jwt-auth",
+    "scope": "global",
+    "config": {
+      "secret_key": "your-secret-key",
+      "algorithm": "HS256",
+      "issuer": "your-issuer",
+      "audience": "your-audience",
+      "cache_ttl_seconds": 300
+    },
+    "priority": 6,
+    "enabled": true
+  }'
+# Test
+curl -H "Authorization: Bearer eyJhbGc..." http://localhost:8080/api/endpoint
+Authentication Scopes
+  • Global: All routes require authentication
+  • Service: All routes of a specific service require authentication
+  • Route: Specific routes require authentication (most flexible)
+Example - Mixed Auth:
+# Public documentation - no auth
+# (Don't add auth plugin to /docs routes)
+# User APIs - JWT required
+# Add jwt-auth plugin with route scope to /api/users/* routes
+# Partner webhooks - API Key required  
+# Add api-key-auth plugin with route scope to /webhooks/* routes
+```
+
 ### Rate Limiting (Phase 9)
 
 #### Algorithms
