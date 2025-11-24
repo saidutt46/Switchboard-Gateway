@@ -22,6 +22,7 @@ Switchboard is a lightweight, high-performance API Gateway that sits between you
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/saidutt46/switchboard-gateway)](https://github.com/saidutt46/switchboard-gateway/releases)
+[![CI](https://github.com/saidutt46/switchboard-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/saidutt46/switchboard-gateway/actions/workflows/ci.yml)
 
 ---
 

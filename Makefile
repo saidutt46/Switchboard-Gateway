@@ -1,7 +1,7 @@
 # Switchboard API Gateway - Makefile
 # Complete build and development automation
 
-.PHONY: help build run test clean docker fmt lint vet deps dev db-setup db-migrate db-reset services-up services-down logs admin stress plugin-test coverage benchmark
+.PHONY: help build run test clean docker fmt lint vet deps dev db-setup db-migrate db-reset services-up services-down logs admin stress plugin-test coverage benchmark security ci ci-quick build-linux-arm64 build-mac-arm64 docker-build-gateway docker-build-admin docker-build-all
 
 # Variables
 BINARY_NAME=gateway
@@ -54,11 +54,23 @@ build-linux: ## Build for Linux (production)
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux $(MAIN_PATH)
 	@echo "$(COLOR_GREEN)✓ Linux build complete$(COLOR_RESET)"
 
+build-linux-arm64: ## Build for Linux ARM64 (e.g., AWS Graviton)
+	@echo "$(COLOR_GREEN)Building for Linux ARM64...$(COLOR_RESET)"
+	@mkdir -p $(BUILD_DIR)
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 $(MAIN_PATH)
+	@echo "$(COLOR_GREEN)✓ Linux ARM64 build complete$(COLOR_RESET)"
+
 build-mac: ## Build for macOS
 	@echo "$(COLOR_GREEN)Building for macOS...$(COLOR_RESET)"
 	@mkdir -p $(BUILD_DIR)
 	@GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin $(MAIN_PATH)
 	@echo "$(COLOR_GREEN)✓ macOS build complete$(COLOR_RESET)"
+
+build-mac-arm64: ## Build for macOS ARM64 (Apple Silicon)
+	@echo "$(COLOR_GREEN)Building for macOS ARM64...$(COLOR_RESET)"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
+	@echo "$(COLOR_GREEN)✓ macOS ARM64 build complete$(COLOR_RESET)"
 
 build-windows: ## Build for Windows
 	@echo "$(COLOR_GREEN)Building for Windows...$(COLOR_RESET)"
@@ -66,7 +78,9 @@ build-windows: ## Build for Windows
 	@GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME).exe $(MAIN_PATH)
 	@echo "$(COLOR_GREEN)✓ Windows build complete$(COLOR_RESET)"
 
-build-all: build-linux build-mac build-windows ## Build for all platforms
+build-all: build-linux build-linux-arm64 build-mac build-mac-arm64 build-windows ## Build for all platforms
+	@echo "$(COLOR_GREEN)✓ All platform builds complete$(COLOR_RESET)"
+	@ls -la $(BUILD_DIR)/
 
 ##@ Testing
 
@@ -132,7 +146,44 @@ vet: ## Run go vet
 	@echo "$(COLOR_GREEN)Running go vet...$(COLOR_RESET)"
 	@go vet ./...
 
-check: fmt vet lint test ## Run all code quality checks
+security: ## Run security scan (gosec)
+	@echo "$(COLOR_GREEN)Running security scan...$(COLOR_RESET)"
+	@gosec -quiet ./... || (echo "$(COLOR_YELLOW)gosec not installed. Install with: go install github.com/securego/gosec/v2/cmd/gosec@latest$(COLOR_RESET)" && exit 1)
+	@echo "$(COLOR_GREEN)✓ Security scan passed$(COLOR_RESET)"
+
+check: fmt vet lint security test ## Run all code quality checks
+
+##@ CI/CD
+
+ci: ## Run all CI checks (same as GitHub Actions)
+	@echo "$(COLOR_BOLD)Running CI Pipeline Locally$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[1/5] Formatting...$(COLOR_RESET)"
+	@go fmt ./...
+	@echo "$(COLOR_GREEN)✓ Format check passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[2/5] Vetting...$(COLOR_RESET)"
+	@go vet ./...
+	@echo "$(COLOR_GREEN)✓ Vet passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[3/5] Linting...$(COLOR_RESET)"
+	@golangci-lint run ./...
+	@echo "$(COLOR_GREEN)✓ Lint passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[4/5] Security scan...$(COLOR_RESET)"
+	@gosec -quiet ./...
+	@echo "$(COLOR_GREEN)✓ Security scan passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)[5/5] Testing with race detection...$(COLOR_RESET)"
+	@go test -race ./...
+	@echo "$(COLOR_GREEN)✓ Tests passed$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)========================================$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)  ✅ All CI checks passed!$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)========================================$(COLOR_RESET)"
+
+ci-quick: lint test ## Quick CI check (lint + test only)
+	@echo "$(COLOR_GREEN)✓ Quick CI passed$(COLOR_RESET)"
 
 ##@ Dependencies
 
@@ -301,6 +352,25 @@ docker-build: ## Build Docker image
 	@docker build -t switchboard-gateway:$(VERSION) .
 	@docker tag switchboard-gateway:$(VERSION) switchboard-gateway:latest
 	@echo "$(COLOR_GREEN)✓ Docker image built: switchboard-gateway:$(VERSION)$(COLOR_RESET)"
+
+docker-build-gateway: ## Build Gateway Docker image (multi-stage)
+	@echo "$(COLOR_GREEN)Building Gateway Docker image...$(COLOR_RESET)"
+	@docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		-t switchboard-gateway:$(VERSION) \
+		-f Dockerfile.gateway .
+	@docker tag switchboard-gateway:$(VERSION) switchboard-gateway:latest
+	@echo "$(COLOR_GREEN)✓ Gateway image built: switchboard-gateway:$(VERSION)$(COLOR_RESET)"
+
+docker-build-admin: ## Build Admin API Docker image
+	@echo "$(COLOR_GREEN)Building Admin API Docker image...$(COLOR_RESET)"
+	@docker build -t switchboard-admin-api:$(VERSION) ./admin-api
+	@docker tag switchboard-admin-api:$(VERSION) switchboard-admin-api:latest
+	@echo "$(COLOR_GREEN)✓ Admin API image built$(COLOR_RESET)"
+
+docker-build-all: docker-build-gateway docker-build-admin ## Build all Docker images
 
 docker-run: ## Run gateway in Docker container
 	@echo "$(COLOR_GREEN)Running gateway in Docker...$(COLOR_RESET)"

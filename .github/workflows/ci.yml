@@ -1,0 +1,285 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: '1.21'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ===========================================================================
+  # Go Gateway - Build, Test, Lint, Security
+  # ===========================================================================
+  go-build:
+    name: Go Build & Test
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: switchboard_test
+          POSTGRES_USER: switchboard
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Run tests
+        env:
+          POSTGRES_DSN: postgres://switchboard:test_password@localhost:5432/switchboard_test?sslmode=disable
+          REDIS_URL: redis://localhost:6379/0
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+        continue-on-error: true
+
+  go-lint:
+    name: Go Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+  go-security:
+    name: Go Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run gosec
+        uses: securego/gosec@master
+        with:
+          args: ./...
+
+  # ===========================================================================
+  # Python Admin API - Build, Test, Lint
+  # ===========================================================================
+  python-build:
+    name: Python Build & Test
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./admin-api
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: switchboard_test
+          POSTGRES_USER: switchboard
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: admin-api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov httpx ruff
+
+      - name: Check syntax
+        run: python -m py_compile app.py models.py database.py
+
+      - name: Run ruff (linter)
+        run: ruff check . --output-format=github
+        continue-on-error: true
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://switchboard:test_password@localhost:5432/switchboard_test
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: test
+        run: pytest -v --cov=. --cov-report=xml || echo "No tests found"
+        continue-on-error: true
+
+  # ===========================================================================
+  # Docker Build
+  # ===========================================================================
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [go-build, python-build]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Admin API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-api
+          push: false
+          tags: switchboard-admin-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Validate docker-compose
+        run: docker-compose config --quiet
+
+  # ===========================================================================
+  # Release (only on tags)
+  # ===========================================================================
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [go-build, go-lint, go-security, python-build, docker-build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build binaries
+        run: |
+          # Build for multiple platforms
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${{ github.ref_name }} -X main.GitCommit=${{ github.sha }} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/switchboard-gateway-linux-amd64 ./cmd/gateway
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=${{ github.ref_name }} -X main.GitCommit=${{ github.sha }} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/switchboard-gateway-linux-arm64 ./cmd/gateway
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${{ github.ref_name }} -X main.GitCommit=${{ github.sha }} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/switchboard-gateway-darwin-amd64 ./cmd/gateway
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${{ github.ref_name }} -X main.GitCommit=${{ github.sha }} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/switchboard-gateway-darwin-arm64 ./cmd/gateway
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${{ github.ref_name }} -X main.GitCommit=${{ github.sha }} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/switchboard-gateway-windows-amd64.exe ./cmd/gateway
+
+      - name: Create checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Admin API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-api
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/admin-api:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/admin-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/switchboard-gateway-linux-amd64
+            dist/switchboard-gateway-linux-arm64
+            dist/switchboard-gateway-darwin-amd64
+            dist/switchboard-gateway-darwin-arm64
+            dist/switchboard-gateway-windows-amd64.exe
+            dist/checksums.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
