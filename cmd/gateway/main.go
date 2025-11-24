@@ -272,6 +272,7 @@ func initializePlugins(ctx context.Context, repo *database.Repository, redisClie
 	registry.Register("cors", builtin.NewCORSPlugin)
 	registry.Register("rate-limit", builtin.NewRateLimitPlugin)
 	registry.Register("api-key-auth", builtin.NewAPIKeyAuthPlugin)
+	registry.Register("jwt-auth", builtin.NewJWTAuthPlugin)
 
 	log.Info().
 		Str("component", "plugins").
