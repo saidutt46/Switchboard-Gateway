@@ -20,6 +20,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.1] - 2024-11-25
+
+### Added
+- **Environment Template**: Added `.env.example` with all configuration options
+- **Version Tracking**: Added `CHANGELOG.md` following Keep a Changelog format
+- **Integration Tests**: Added end-to-end healthcheck tests
+- **Enhanced Documentation**: 
+  - Docker deployment guide in README
+  - 2-package architecture explanation
+  - Swagger UI with response models
+- **Developer Experience**:
+  - `make dev-infra` - Start infrastructure only
+  - `make run-local` - Run gateway locally
+  - `make logs-gateway`, `make logs-admin` - View service logs
+  - `make health-all` - Check all service health
+  - `make release-tag` - Create releases easily
+
+### Changed
+- **Admin API**: Enhanced Swagger documentation with OpenAPI metadata
+- **Admin API**: Added Pydantic response models for type safety
+- **Health Endpoints**: Improved responses with detailed status
+- **Makefile**: Fixed `Dockerfile.Gateway` reference (was `Dockerfile.gateway`)
+
+### Fixed
+- None
+
+---
+
+---
+
 ## [0.7.0] - 2024-11-25
 
 ### Added
