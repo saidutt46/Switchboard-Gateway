@@ -519,6 +519,80 @@ curl -H "X-API-Key: <your-key>" http://localhost:8080/api
 
 ---
 
+## 🐳 Docker Deployment
+
+### Two Docker Images
+
+Switchboard uses a **2-package architecture** for optimal performance and scaling:
+
+| Package | Purpose | Size | Scaling Strategy |
+|---------|---------|------|------------------|
+| **Gateway** (`gateway:v0.7.0`) | High-performance traffic routing | ~20MB | Horizontal (1-100+ instances) |
+| **Admin API** (`admin-api:v0.7.0`) | Configuration management | ~200MB | Minimal (1-2 instances) |
+
+### Deployment Options
+
+**Option 1: Docker Compose (Recommended for Development/Testing)**
+```bash
+# Start full stack
+docker-compose up -d
+
+# View logs
+docker-compose logs -f gateway
+docker-compose logs -f admin-api
+
+# Check health
+curl http://localhost:8080/health
+curl http://localhost:8000/health
+```
+
+**Option 2: Pull Pre-built Images (Production)**
+```bash
+# Pull images
+docker pull ghcr.io/saidutt46/switchboard-gateway/gateway:v0.7.0
+docker pull ghcr.io/saidutt46/switchboard-gateway/admin-api:v0.7.0
+
+# Run Gateway
+docker run -d \
+  --name switchboard-gateway \
+  -p 8080:8080 \
+  -e POSTGRES_DSN="postgresql://user:pass@postgres:5432/switchboard" \
+  -e REDIS_URL="redis://redis:6379/0" \
+  ghcr.io/saidutt46/switchboard-gateway/gateway:v0.7.0
+
+# Run Admin API
+docker run -d \
+  --name switchboard-admin-api \
+  -p 8000:8000 \
+  -e DATABASE_URL="postgresql://user:pass@postgres:5432/switchboard" \
+  -e REDIS_URL="redis://redis:6379/0" \
+  ghcr.io/saidutt46/switchboard-gateway/admin-api:v0.7.0
+```
+
+**Option 3: Build Locally**
+```bash
+# Build Gateway
+make docker-build-gateway
+
+# Build Admin API
+make docker-build-admin
+
+# Or build both
+make docker-build-all
+```
+
+### Environment Variables
+
+Copy the example environment file and customize:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+See [Configuration](#configuration) section for all available options.
+
+---
+
 ## 🧪 Testing
 
 ```bash

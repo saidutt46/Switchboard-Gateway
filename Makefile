@@ -111,6 +111,11 @@ test-proxy: ## Test reverse proxy
 	@echo "$(COLOR_GREEN)Testing reverse proxy...$(COLOR_RESET)"
 	@go test -v ./internal/proxy
 
+test-integration: services-up ## Run integration tests
+	@echo "$(COLOR_GREEN)Running integration tests...$(COLOR_RESET)"
+	@sleep 5  # Wait for services
+	@go test -tags=integration -v ./tests/integration/...
+
 ##@ Load Testing (k6)
 
 stress-smoke: services-up ## Run smoke test (quick validation)

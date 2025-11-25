@@ -7,10 +7,47 @@ import logging
 
 from config import get_settings
 from database import init_db, check_db_connection
+from pydantic import BaseModel
 import redis
 
 # Import routers
 from routers import services, routes, consumers, plugins
+
+class HealthResponse(BaseModel):
+    """Health check response model."""
+    status: str
+    version: str
+    database: str
+    redis: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "healthy",
+                "version": "1.0.0",
+                "database": "healthy",
+                "redis": "healthy"
+            }
+        }
+
+class RootResponse(BaseModel):
+    """Root endpoint response model."""
+    name: str
+    version: str
+    environment: str
+    docs: str
+    health: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Switchboard Admin API",
+                "version": "1.0.0",
+                "environment": "development",
+                "docs": "/docs",
+                "health": "/health"
+            }
+        }
 
 # Configure logging
 logging.basicConfig(
@@ -55,14 +92,56 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI app
+# Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="REST API for managing Switchboard API Gateway configuration",
+    description="""
+    ## Switchboard Admin API
+    
+    REST API for managing Switchboard API Gateway configuration.
+    
+    ### Features
+    - **Services**: Manage backend microservices
+    - **Routes**: Configure request routing rules
+    - **Consumers**: Manage API consumers and authentication
+    - **Plugins**: Configure gateway plugins (auth, rate limiting, caching, etc.)
+    
+    ### Authentication
+    Currently no authentication required for development. Production deployments
+    should add authentication middleware.
+    """,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    # Enhanced metadata
+    contact={
+        "name": "Switchboard Gateway",
+        "url": "https://github.com/saidutt46/Switchboard-Gateway",
+    },
+    license_info={
+        "name": "Apache 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
+    },
+    openapi_tags=[
+        {
+            "name": "Services",
+            "description": "Manage backend microservices that handle requests",
+        },
+        {
+            "name": "Routes",
+            "description": "Configure routing rules (paths, methods, hosts)",
+        },
+        {
+            "name": "Consumers",
+            "description": "Manage API consumers and their API keys",
+        },
+        {
+            "name": "Plugins",
+            "description": "Configure gateway plugins (auth, rate limiting, CORS, etc.)",
+        },
+    ],
 )
 
 # CORS middleware
@@ -81,9 +160,14 @@ app.include_router(consumers.router, prefix="/consumers", tags=["Consumers"])
 app.include_router(plugins.router, prefix="/plugins", tags=["Plugins"])
 
 
-@app.get("/")
+@app.get(
+    "/",
+    response_model=RootResponse,
+    summary="API Information",
+    description="Get basic information about the Admin API",
+)
 async def root():
-    """Root endpoint - API info."""
+    """Root endpoint with API metadata and important links."""
     return {
         "name": settings.app_name,
         "version": settings.app_version,
@@ -92,10 +176,14 @@ async def root():
         "health": "/health",
     }
 
-
-@app.get("/health")
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    summary="Health Check",
+    description="Check the health status of Admin API and its dependencies",
+)
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint with detailed status of all components."""
     db_status = "healthy" if check_db_connection() else "unhealthy"
     
     # Check Redis
@@ -113,10 +201,3 @@ async def health():
         "database": db_status,
         "redis": redis_status,
     }
-
-# TODO: Import and include routers here in next sessions
-# from routers import services, routes, consumers, plugins
-# app.include_router(services.router, prefix="/services", tags=["Services"])
-# app.include_router(routes.router, prefix="/routes", tags=["Routes"])
-# app.include_router(consumers.router, prefix="/consumers", tags=["Consumers"])
-# app.include_router(plugins.router, prefix="/plugins", tags=["Plugins"])
