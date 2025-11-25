@@ -242,6 +242,74 @@ services-clean: ## Stop and remove all containers and volumes
 		echo "$(COLOR_GREEN)✓ Services cleaned$(COLOR_RESET)"; \
 	fi
 
+##@ Health Checks
+
+health-gateway: ## Check Gateway health
+	@curl -s http://localhost:8080/health | jq || curl -s http://localhost:8080/health
+
+health-admin: ## Check Admin API health
+	@curl -s http://localhost:8000/health | jq || curl -s http://localhost:8000/health
+
+health-all: ## Check all service health
+	@echo "$(COLOR_BLUE)Gateway:$(COLOR_RESET)"
+	@curl -s http://localhost:8080/health | jq -r '.status' 2>/dev/null || echo "❌ Not responding"
+	@echo "$(COLOR_BLUE)Admin API:$(COLOR_RESET)"
+	@curl -s http://localhost:8000/health | jq -r '.status' 2>/dev/null || echo "❌ Not responding"
+	@echo "$(COLOR_BLUE)PostgreSQL:$(COLOR_RESET)"
+	@docker exec switchboard-postgres pg_isready -U switchboard || echo "❌ Not healthy"
+	@echo "$(COLOR_BLUE)Redis:$(COLOR_RESET)"
+	@docker exec switchboard-redis redis-cli PING || echo "❌ Not healthy"
+
+##@ Development Workflows
+
+dev-infra: ## Start infrastructure only (for local development)
+	@echo "$(COLOR_GREEN)Starting development infrastructure...$(COLOR_RESET)"
+	@docker-compose up -d postgres redis demo-backend
+	@echo "$(COLOR_GREEN)✓ Infrastructure running$(COLOR_RESET)"
+	@echo "$(COLOR_YELLOW)Run 'make run' to start gateway locally$(COLOR_RESET)"
+
+dev-stop: ## Stop development infrastructure
+	@echo "$(COLOR_GREEN)Stopping development infrastructure...$(COLOR_RESET)"
+	@docker-compose stop postgres redis demo-backend
+	@echo "$(COLOR_GREEN)✓ Infrastructure stopped$(COLOR_RESET)"
+
+dev-full: services-up ## Start full stack (all services in Docker)
+	@echo "$(COLOR_GREEN)✓ Full development stack running$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Gateway:    http://localhost:8080$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Admin API:  http://localhost:8000$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Postgres:   localhost:5432$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Redis:      localhost:6379$(COLOR_RESET)"
+
+run-local: dev-infra ## Run gateway locally with infrastructure in Docker
+	@echo "$(COLOR_GREEN)Starting gateway locally...$(COLOR_RESET)"
+	@sleep 3  # Wait for infrastructure
+	@export POSTGRES_DSN="postgresql://switchboard:switchboard_dev_password@localhost:5432/switchboard" && \
+	 export REDIS_URL="redis://localhost:6379/0" && \
+	 export LOG_LEVEL=debug && \
+	 go run $(MAIN_PATH)
+
+
+##@ Logs & Monitoring
+
+logs-gateway: ## View Gateway logs
+	@docker-compose logs -f gateway
+
+logs-admin: ## View Admin API logs  
+	@docker-compose logs -f admin-api
+
+logs-postgres: ## View PostgreSQL logs
+	@docker-compose logs -f postgres
+
+logs-redis: ## View Redis logs
+	@docker-compose logs -f redis
+
+logs-all: ## View all service logs
+	@docker-compose logs -f
+
+logs-tail: ## Tail last 50 lines from all services
+	@docker-compose logs --tail=50
+
+
 ##@ Database
 
 db-connect: ## Connect to PostgreSQL database
@@ -360,7 +428,7 @@ docker-build-gateway: ## Build Gateway Docker image (multi-stage)
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
 		-t switchboard-gateway:$(VERSION) \
-		-f Dockerfile.gateway .
+		-f Dockerfile.Gateway .
 	@docker tag switchboard-gateway:$(VERSION) switchboard-gateway:latest
 	@echo "$(COLOR_GREEN)✓ Gateway image built: switchboard-gateway:$(VERSION)$(COLOR_RESET)"
 
@@ -385,6 +453,40 @@ docker-stop: ## Stop gateway Docker container
 	@docker stop switchboard-gateway || true
 	@docker rm switchboard-gateway || true
 	@echo "$(COLOR_GREEN)✓ Gateway container stopped$(COLOR_RESET)"
+
+docker-validate: ## Validate docker-compose.yml
+	@echo "$(COLOR_GREEN)Validating docker-compose.yml...$(COLOR_RESET)"
+	@docker-compose config --quiet
+	@echo "$(COLOR_GREEN)✓ docker-compose.yml is valid$(COLOR_RESET)"
+
+docker-ps: ## Show running containers
+	@docker-compose ps
+
+##@ Release
+
+release-tag: ## Create and push a release tag (usage: make release-tag VERSION=v0.7.1)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "$(COLOR_YELLOW)Usage: make release-tag VERSION=v0.7.1$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_GREEN)Creating release tag $(VERSION)...$(COLOR_RESET)"
+	@git tag -a $(VERSION) -m "Release $(VERSION)"
+	@git push origin $(VERSION)
+	@echo "$(COLOR_GREEN)✓ Release $(VERSION) pushed!$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)View release at: https://github.com/saidutt46/Switchboard-Gateway/releases/tag/$(VERSION)$(COLOR_RESET)"
+
+release-delete: ## Delete a release tag (usage: make release-delete VERSION=v0.7.0)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "$(COLOR_YELLOW)Usage: make release-delete VERSION=v0.7.0$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_YELLOW)Deleting release tag $(VERSION)...$(COLOR_RESET)"
+	@git tag -d $(VERSION) || true
+	@git push origin :refs/tags/$(VERSION) || true
+	@echo "$(COLOR_GREEN)✓ Tag $(VERSION) deleted$(COLOR_RESET)"
+
+release-list: ## List all release tags
+	@git tag -l "v*" --sort=-v:refname | head -10
 
 ##@ Performance
 
@@ -414,8 +516,20 @@ clean: ## Remove build artifacts
 clean-all: clean services-clean ## Clean everything (build + Docker)
 
 ##@ Quick Start
+quickstart: services-up db-setup db-test-data ## Complete quickstart (Docker full stack)
+	@echo ""
+	@echo "$(COLOR_BOLD)========================================$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)  ✅ Switchboard Gateway is Ready!$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)========================================$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Gateway:    http://localhost:8080/health$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Admin API:  http://localhost:8000/health$(COLOR_RESET)"
+	@echo ""
+	@echo "Test it:"
+	@echo "  curl http://localhost:8080/health"
+	@echo ""
 
-quickstart: services-up db-setup db-test-data build run ## Complete quickstart (setup + run)
+quickstart-local: dev-infra db-setup db-test-data build run ## Quickstart with local gateway
 
 reset: services-down clean services-up db-setup db-test-data ## Reset everything
 
