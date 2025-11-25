@@ -1,18 +1,21 @@
+# golangci-lint configuration for Switchboard Gateway
+# Using only default linters that catch actual bugs
 version: "2"
 
+run:
+  timeout: 5m
+  tests: true
+  go: '1.21'
+
 linters:
-  default: none
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-  settings:
-    errcheck:
-      exclude-functions:
-        - (io.Closer).Close
-        - (*os.File).Close
-        - (net/http.ResponseWriter).Write
-        - (*database/sql.Rows).Close
-        - (*github.com/redis/go-redis/v9.Client).Close
+    # Default linters only - focused on bug detection
+    - errcheck      # Check unchecked errors
+    - govet         # Go's official analyzer
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Advanced static analysis
+    - unused        # Find unused code
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
