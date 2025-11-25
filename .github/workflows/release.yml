@@ -118,7 +118,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.Gateway
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -126,6 +126,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.event.repository.updated_at }}
 
   build-admin-api-image:
     name: Build Admin API Docker Image

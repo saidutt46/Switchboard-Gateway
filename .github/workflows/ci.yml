@@ -206,16 +206,21 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.Gateway
           push: false
           tags: switchboard-gateway:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=test
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
 
       - name: Build Admin API image (test)
         uses: docker/build-push-action@v5
         with:
           context: ./admin-api
+          file: ./admin-api/Dockerfile
           push: false
           tags: switchboard-admin-api:test
           cache-from: type=gha
