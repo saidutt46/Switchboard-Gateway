@@ -1,5 +1,5 @@
 # golangci-lint configuration for Switchboard Gateway
-# Using only default linters that catch actual bugs
+# Version 2 schema (requires golangci-lint-action@v8+)
 version: "2"
 
 run:
@@ -9,12 +9,11 @@ run:
 
 linters:
   enable:
-    # Default linters only - focused on bug detection
-    - errcheck      # Check unchecked errors
-    - govet         # Go's official analyzer
-    - ineffassign   # Detect ineffectual assignments
-    - staticcheck   # Advanced static analysis
-    - unused        # Find unused code
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
 
 issues:
   max-issues-per-linter: 0
