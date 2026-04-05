@@ -2,12 +2,12 @@
 -- Run with: psql -U switchboard -d switchboard -f setup_test_routes.sql
 
 -- Clean up first (if service exists, delete it and all its routes)
-DELETE FROM routes WHERE service_id IN (SELECT id FROM services WHERE name = 'user-service');
-DELETE FROM services WHERE name = 'user-service';
+DELETE FROM routes WHERE service_id IN (SELECT id FROM services WHERE name = 'example-httpbin');
+DELETE FROM services WHERE name = 'example-httpbin';
 
 -- Create test service pointing to httpbin
 INSERT INTO services (name, protocol, host, port, path, enabled)
-VALUES ('user-service', 'http', 'localhost', 8081, NULL, true);
+VALUES ('example-httpbin', 'http', 'localhost', 8081, NULL, true);
 
 -- Create routes with different patterns to test radix tree
 
@@ -20,7 +20,7 @@ SELECT
     ARRAY['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'],
     true
 FROM services 
-WHERE name = 'user-service';
+WHERE name = 'example-httpbin';
 
 -- Route 2: Status code endpoint (parameter extraction test)
 INSERT INTO routes (service_id, name, paths, methods, enabled)
@@ -31,7 +31,7 @@ SELECT
     ARRAY['GET'],
     true
 FROM services 
-WHERE name = 'user-service';
+WHERE name = 'example-httpbin';
 
 -- Route 3: Delay endpoint (another parameter test)
 INSERT INTO routes (service_id, name, paths, methods, enabled)
@@ -42,7 +42,7 @@ SELECT
     ARRAY['GET'],
     true
 FROM services 
-WHERE name = 'user-service';
+WHERE name = 'example-httpbin';
 
 -- Route 4: Headers endpoints (multiple exact matches)
 INSERT INTO routes (service_id, name, paths, methods, enabled)
@@ -53,7 +53,7 @@ SELECT
     ARRAY['GET'],
     true
 FROM services 
-WHERE name = 'user-service';
+WHERE name = 'example-httpbin';
 
 -- Show the configuration
 SELECT 
@@ -64,7 +64,7 @@ SELECT
     array_length(r.paths, 1) as path_count
 FROM services s
 JOIN routes r ON s.id = r.service_id
-WHERE s.name = 'user-service'
+WHERE s.name = 'example-httpbin'
 ORDER BY r.created_at;
 
 -- Show summary for radix tree
@@ -73,12 +73,12 @@ SELECT
     SUM(array_length(r.paths, 1)) as total_paths_in_tree
 FROM routes r
 JOIN services s ON r.service_id = s.id
-WHERE s.name = 'user-service' AND r.enabled = true;
+WHERE s.name = 'example-httpbin' AND r.enabled = true;
 
 -- Success message
 SELECT '';
 SELECT '=== Setup Complete ===';
-SELECT 'Service: user-service -> http://localhost:8081';
+SELECT 'Service: example-httpbin -> http://localhost:8081';
 SELECT 'Routes created with patterns for radix tree testing';
 SELECT '';
 SELECT 'Start httpbin with: docker run -d -p 8081:80 kennethreitz/httpbin';

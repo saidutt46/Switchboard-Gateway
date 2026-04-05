@@ -193,36 +193,36 @@ CREATE TRIGGER update_plugins_updated_at BEFORE UPDATE ON plugins
 -- SAMPLE DATA (for development/testing)
 -- ============================================================================
 
--- Sample Service: User Service
+-- Example Service: httpbin demo backend (for testing gateway routing)
 INSERT INTO services (name, protocol, host, port) VALUES
-('user-service', 'http', 'demo-backend', 80);
+('example-httpbin', 'http', 'demo-backend', 80);
 
--- Sample Service Targets (load balancing)
+-- Example Service Targets (load balancing)
 INSERT INTO service_targets (service_id, target, weight) VALUES
-((SELECT id FROM services WHERE name = 'user-service'), 'demo-backend:80', 100);
+((SELECT id FROM services WHERE name = 'example-httpbin'), 'demo-backend:80', 100);
 
--- Sample Route: User API
+-- Example Route: demo API endpoints
 INSERT INTO routes (service_id, name, paths, methods) VALUES
-((SELECT id FROM services WHERE name = 'user-service'), 
- 'user-api', 
+((SELECT id FROM services WHERE name = 'example-httpbin'),
+ 'example-api-routes',
  ARRAY['/api/users', '/api/users/:id'],
  ARRAY['GET', 'POST', 'PUT', 'DELETE']);
 
--- Sample Consumer: Test App
+-- Example Consumer: test application
 INSERT INTO consumers (username, email) VALUES
-('test-app', 'test@switchboard.dev');
+('example-app', 'example@switchboard.dev');
 
 -- Sample API Key (hashed: "test-key-12345")
 -- Key: test-key-12345
 -- SHA256: 5d5be9d12e23f8b8c3e3f4c36d3a3c3b3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c
 INSERT INTO api_keys (consumer_id, key_hash, name) VALUES
-((SELECT id FROM consumers WHERE username = 'test-app'),
+((SELECT id FROM consumers WHERE username = 'example-app'),
  '5d5be9d12e23f8b8c3e3f4c36d3a3c3b3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c',
- 'Test API Key');
+ 'example-api-key');
 
--- Sample Plugin: Global Rate Limit
+-- Example Plugin: Global Rate Limit
 INSERT INTO plugins (name, scope, config, priority) VALUES
-('rate-limit', 'global', '{"limit": 1000, "window": "1m", "algorithm": "sliding-window"}', 20);
+('rate-limit', 'global', '{"limit": 1000, "window": "1m", "algorithm": "sliding-window", "identifier": "auto", "redis_url": "redis://redis:6379/0"}', 20);
 
 -- ============================================================================
 -- VIEWS (for analytics/reporting)
