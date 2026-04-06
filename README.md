@@ -409,44 +409,18 @@ Real benchmarks from load testing:
 
 ## 🖥️ Admin Dashboard
 
-Switchboard includes a full **Admin UI** for managing your gateway visually — no curl needed.
-
-### Features
-
-- **Dashboard** — System health monitoring, entity counts, analytics charts (HTTP methods, plugin distribution, active rate gauge)
-- **Services** — Create, edit, delete, enable/disable backend services with full config (timeouts, retries, load balancing)
-- **Routes** — Map paths to services with method selection, service filtering, and search
-- **Consumers** — Manage API clients with full key lifecycle (generate, enable/disable, revoke). One-time key display with copy-to-clipboard
-- **Plugins** — Dynamic config editors for all 6 plugin types. Scope to global, service, route, or consumer
-- **Dark/Light Mode** — Theme toggle with persistence
-- **Collapsible Sidebar** — Full or icon-only navigation
-- **Search & Filtering** — On all list pages with entity-specific filters
-- **Error Notifications** — Parses API error responses and displays meaningful messages
-
-### Quick Start
+Switchboard includes an **Admin UI** for managing your gateway visually — configure services, routes, consumers, plugins, and monitor health without touching curl.
 
 ```bash
-# Development (hot reload)
-cd admin-ui
-npm install
-npm run dev
-# Open http://localhost:5173
-
-# Production (Docker)
+# Start everything
 docker compose up -d
-# Open http://localhost:4000
+
+# Admin UI:  http://localhost:4000
+# Admin API: http://localhost:8000
+# Gateway:   http://localhost:8080
 ```
 
-### Tech Stack
-
-React 19 | TypeScript | Vite | Tailwind CSS v4 | Headless UI | TanStack Query | React Hook Form | Recharts
-
-### Testing
-
-```bash
-npm run test        # 31 unit tests (Vitest)
-npm run test:e2e    # 18 e2e tests (Playwright)
-```
+Built with React 19, TypeScript, and Tailwind CSS. See [`admin-ui/`](admin-ui/) for development setup and testing.
 
 ---
 
