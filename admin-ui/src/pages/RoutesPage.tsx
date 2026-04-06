@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Route as RouteIcon, Trash2, Pencil } from 'lucide-react'
+import { SearchInput } from '../components/shared/SearchInput'
+import { useServices } from '../hooks/useServices'
 import { Header } from '../components/layout/Header'
 import { DataTable, type Column } from '../components/shared/DataTable'
 import { StatusBadge } from '../components/shared/StatusBadge'
@@ -21,9 +23,22 @@ export function RoutesPage() {
   const updateMutation = useUpdateRoute()
   const deleteMutation = useDeleteRoute()
 
+  const { data: services } = useServices()
+  const [search, setSearch] = useState('')
+  const [serviceFilter, setServiceFilter] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editRoute, setEditRoute] = useState<Route | null>(null)
   const [deleteRoute, setDeleteRoute] = useState<Route | null>(null)
+
+  const filteredRoutes = useMemo(() => {
+    let result = routes || []
+    if (serviceFilter) result = result.filter((r) => r.service_id === serviceFilter)
+    if (search) result = result.filter((r) =>
+      (r.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      r.paths.some((p) => p.toLowerCase().includes(search.toLowerCase()))
+    )
+    return result
+  }, [routes, search, serviceFilter])
 
   const handleCreate = (data: RouteCreate) => {
     createMutation.mutate(data, {
@@ -139,10 +154,21 @@ export function RoutesPage() {
           </button>
         }
       />
-      <div className="mx-auto max-w-5xl p-6">
+      <div className="mx-auto max-w-5xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search routes..." className="max-w-xs" />
+          <select
+            value={serviceFilter}
+            onChange={(e) => setServiceFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">All services</option>
+            {services?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
         <DataTable
           columns={columns}
-          data={routes || []}
+          data={filteredRoutes}
           isLoading={isLoading}
           keyExtractor={(r) => r.id}
           onRowClick={(r) => navigate(`/routes/${r.id}`)}

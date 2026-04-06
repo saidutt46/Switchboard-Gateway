@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Puzzle, Trash2, Pencil } from 'lucide-react'
+import { SearchInput } from '../components/shared/SearchInput'
 import { Header } from '../components/layout/Header'
 import { DataTable, type Column } from '../components/shared/DataTable'
 import { StatusBadge } from '../components/shared/StatusBadge'
@@ -21,9 +22,18 @@ export function PluginsPage() {
   const updateMutation = useUpdatePlugin()
   const deleteMutation = useDeletePlugin()
 
+  const [search, setSearch] = useState('')
+  const [scopeFilter, setScopeFilter] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editPlugin, setEditPlugin] = useState<Plugin | null>(null)
   const [deletePlugin, setDeletePlugin] = useState<Plugin | null>(null)
+
+  const filteredPlugins = useMemo(() => {
+    let result = plugins || []
+    if (scopeFilter) result = result.filter((p) => p.scope === scopeFilter)
+    if (search) result = result.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    return result
+  }, [plugins, search, scopeFilter])
 
   const handleCreate = (data: PluginCreate) => {
     createMutation.mutate(data, {
@@ -98,8 +108,22 @@ export function PluginsPage() {
           <Plus className="h-3.5 w-3.5" /> New Plugin
         </button>
       } />
-      <div className="mx-auto max-w-5xl p-6">
-        <DataTable columns={columns} data={plugins || []} isLoading={isLoading} keyExtractor={(p) => p.id} onRowClick={(p) => navigate(`/plugins/${p.id}`)}
+      <div className="mx-auto max-w-5xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search plugins..." className="max-w-xs" />
+          <select
+            value={scopeFilter}
+            onChange={(e) => setScopeFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">All scopes</option>
+            <option value="global">Global</option>
+            <option value="service">Service</option>
+            <option value="route">Route</option>
+            <option value="consumer">Consumer</option>
+          </select>
+        </div>
+        <DataTable columns={columns} data={filteredPlugins} isLoading={isLoading} keyExtractor={(p) => p.id} onRowClick={(p) => navigate(`/plugins/${p.id}`)}
           emptyState={{ title: 'No plugins configured', description: 'Add plugins to enable authentication, rate limiting, caching, and more.', icon: <Puzzle className="h-8 w-8" />,
             action: <button onClick={() => setCreateOpen(true)} className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">Add Plugin</button> }}
         />

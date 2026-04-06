@@ -88,7 +88,7 @@ export function PluginDetailPage() {
         breadcrumbs={[{ label: 'Plugins' }, { label: plugin.name }]}
         action={
           <div className="flex items-center gap-2">
-            <button onClick={() => setEditOpen(true)} className={cn('inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors')}>
+            <button onClick={() => setEditOpen(true)} className={cn('inline-flex items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors')}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </button>
             <button onClick={() => setDeleteOpen(true)} className={cn('inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors')}>
@@ -110,7 +110,7 @@ export function PluginDetailPage() {
           {/* Main — 2 cols */}
           <div className="lg:col-span-2 space-y-6">
             {/* Config rendered as key-value */}
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card">
               <div className="border-b px-4 py-2.5">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Configuration</h3>
               </div>
@@ -145,7 +145,7 @@ export function PluginDetailPage() {
             </div>
 
             {/* Raw JSON */}
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card">
               <div className="border-b px-4 py-2.5">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Raw JSON</h3>
               </div>
@@ -160,7 +160,7 @@ export function PluginDetailPage() {
           {/* Sidebar — 1 col */}
           <div className="space-y-6">
             {/* Details */}
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card">
               <div className="border-b px-4 py-2.5">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Details</h3>
               </div>
@@ -182,7 +182,7 @@ export function PluginDetailPage() {
 
             {/* Linked Entity */}
             {plugin.scope !== 'global' && (
-              <div className="rounded-md border">
+              <div className="rounded-xl border bg-card">
                 <div className="border-b px-4 py-2.5">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Attached {plugin.scope}

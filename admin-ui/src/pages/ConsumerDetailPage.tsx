@@ -90,7 +90,7 @@ export function ConsumerDetailPage() {
     <div>
       <Header breadcrumbs={[{ label: 'Consumers' }, { label: consumer.username }]} action={
         <div className="flex items-center gap-2">
-          <button onClick={() => setEditOpen(true)} className={cn('inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors')}>
+          <button onClick={() => setEditOpen(true)} className={cn('inline-flex items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors')}>
             <Pencil className="h-3.5 w-3.5" /> Edit
           </button>
           <button onClick={() => setDeleteOpen(true)} className={cn('inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors')}>
@@ -101,7 +101,7 @@ export function ConsumerDetailPage() {
 
       <div className="mx-auto max-w-5xl p-6 space-y-6">
         {/* Info */}
-        <div className="rounded-md border">
+        <div className="rounded-xl border bg-card">
           <div className="border-b px-4 py-2">
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Details</h3>
           </div>
@@ -122,7 +122,7 @@ export function ConsumerDetailPage() {
         </div>
 
         {/* API Keys */}
-        <div className="rounded-md border">
+        <div className="rounded-xl border bg-card">
           <div className="flex items-center justify-between border-b px-4 py-2">
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">API Keys</h3>
             <button

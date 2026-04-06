@@ -44,7 +44,7 @@ export function DataTable<T>({
 
   if (isLoading) {
     return (
-      <div className="rounded-md border p-4">
+      <div className="rounded-xl border bg-card p-4">
         <LoadingSkeleton rows={5} cols={columns.length} />
       </div>
     )
@@ -52,14 +52,14 @@ export function DataTable<T>({
 
   if (data.length === 0 && emptyState) {
     return (
-      <div className="rounded-md border">
+      <div className="rounded-xl border bg-card">
         <EmptyState {...emptyState} />
       </div>
     )
   }
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-xl border bg-card">
       <table className="w-full">
         <thead>
           <tr className="border-b bg-muted/50">

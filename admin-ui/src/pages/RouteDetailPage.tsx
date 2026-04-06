@@ -75,7 +75,7 @@ export function RouteDetailPage() {
         breadcrumbs={[{ label: 'Routes' }, { label: route.name || route.paths[0] }]}
         action={
           <div className="flex items-center gap-2">
-            <button onClick={() => setEditOpen(true)} className={cn('inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors')}>
+            <button onClick={() => setEditOpen(true)} className={cn('inline-flex items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors')}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </button>
             <button onClick={() => setDeleteOpen(true)} className={cn('inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors')}>
@@ -96,21 +96,21 @@ export function RouteDetailPage() {
           {/* Main info — 2 cols */}
           <div className="lg:col-span-2 space-y-6">
             {/* Paths */}
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card">
               <div className="border-b px-4 py-2.5">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Paths</h3>
               </div>
               <div className="p-4">
                 <div className="flex flex-wrap gap-2">
                   {route.paths.map((p) => (
-                    <span key={p} className="rounded-md border bg-muted/50 px-3 py-1.5 font-mono text-sm text-foreground">{p}</span>
+                    <span key={p} className="rounded-xl border bg-card bg-muted/50 px-3 py-1.5 font-mono text-sm text-foreground">{p}</span>
                   ))}
                 </div>
               </div>
             </div>
 
             {/* Methods */}
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card">
               <div className="border-b px-4 py-2.5">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Methods</h3>
               </div>
@@ -123,7 +123,7 @@ export function RouteDetailPage() {
 
             {/* Plugins on this route */}
             {routePlugins && routePlugins.length > 0 && (
-              <div className="rounded-md border">
+              <div className="rounded-xl border bg-card">
                 <div className="border-b px-4 py-2.5">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Plugins ({routePlugins.length})</h3>
                 </div>
@@ -146,7 +146,7 @@ export function RouteDetailPage() {
           <div className="space-y-6">
             {/* Parent Service */}
             {parentService && (
-              <div className="rounded-md border">
+              <div className="rounded-xl border bg-card">
                 <div className="border-b px-4 py-2.5">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Service</h3>
                 </div>
@@ -161,7 +161,7 @@ export function RouteDetailPage() {
             )}
 
             {/* Config */}
-            <div className="rounded-md border">
+            <div className="rounded-xl border bg-card">
               <div className="border-b px-4 py-2.5">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Configuration</h3>
               </div>

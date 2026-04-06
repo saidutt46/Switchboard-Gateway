@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Server, Trash2, Pencil } from 'lucide-react'
+import { SearchInput } from '../components/shared/SearchInput'
 import { Header } from '../components/layout/Header'
 import { DataTable, type Column } from '../components/shared/DataTable'
 import { StatusBadge } from '../components/shared/StatusBadge'
@@ -20,6 +21,7 @@ export function ServicesPage() {
   const updateMutation = useUpdateService()
   const deleteMutation = useDeleteService()
 
+  const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editService, setEditService] = useState<Service | null>(null)
   const [deleteService, setDeleteService] = useState<Service | null>(null)
@@ -134,10 +136,11 @@ export function ServicesPage() {
           </button>
         }
       />
-      <div className="mx-auto max-w-5xl p-6">
+      <div className="mx-auto max-w-5xl p-6 space-y-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search services..." className="max-w-xs" />
         <DataTable
           columns={columns}
-          data={services || []}
+          data={(services || []).filter((s) => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.host.toLowerCase().includes(search.toLowerCase()))}
           isLoading={isLoading}
           keyExtractor={(s) => s.id}
           onRowClick={(s) => navigate(`/services/${s.id}`)}

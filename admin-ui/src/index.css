@@ -47,8 +47,8 @@
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 98%;
   --ring: 222 47% 11%;
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 213 27% 84%;
+  --sidebar: 0 0% 13%;
+  --sidebar-foreground: 0 0% 65%;
 }
 
 /* Dark mode — deep slate, cool tones */
@@ -70,8 +70,8 @@
   --destructive: 0 62% 45%;
   --destructive-foreground: 0 0% 98%;
   --ring: 210 20% 70%;
-  --sidebar: 222 47% 4%;
-  --sidebar-foreground: 215 20% 65%;
+  --sidebar: 0 0% 8%;
+  --sidebar-foreground: 0 0% 55%;
 }
 
 * {

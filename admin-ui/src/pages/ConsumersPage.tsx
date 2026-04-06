@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Users, Trash2, Pencil } from 'lucide-react'
+import { SearchInput } from '../components/shared/SearchInput'
 import { Header } from '../components/layout/Header'
 import { DataTable, type Column } from '../components/shared/DataTable'
 import { SlidePanel } from '../components/shared/SlidePanel'
@@ -20,9 +21,18 @@ export function ConsumersPage() {
   const updateMutation = useUpdateConsumer()
   const deleteMutation = useDeleteConsumer()
 
+  const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editConsumer, setEditConsumer] = useState<Consumer | null>(null)
   const [deleteConsumer, setDeleteConsumer] = useState<Consumer | null>(null)
+
+  const filteredConsumers = useMemo(() => {
+    if (!search) return consumers || []
+    return (consumers || []).filter((c) =>
+      c.username.toLowerCase().includes(search.toLowerCase()) ||
+      (c.email || '').toLowerCase().includes(search.toLowerCase())
+    )
+  }, [consumers, search])
 
   const handleCreate = (data: ConsumerCreate) => {
     createMutation.mutate(data, {
@@ -74,8 +84,9 @@ export function ConsumersPage() {
           <Plus className="h-3.5 w-3.5" /> New Consumer
         </button>
       } />
-      <div className="mx-auto max-w-5xl p-6">
-        <DataTable columns={columns} data={consumers || []} isLoading={isLoading} keyExtractor={(c) => c.id} onRowClick={(c) => navigate(`/consumers/${c.id}`)}
+      <div className="mx-auto max-w-5xl p-6 space-y-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search consumers..." className="max-w-xs" />
+        <DataTable columns={columns} data={filteredConsumers} isLoading={isLoading} keyExtractor={(c) => c.id} onRowClick={(c) => navigate(`/consumers/${c.id}`)}
           emptyState={{ title: 'No consumers yet', description: 'Create consumers to manage API access.', icon: <Users className="h-8 w-8" />,
             action: <button onClick={() => setCreateOpen(true)} className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">Create Consumer</button> }}
         />
