@@ -226,5 +226,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build Admin UI image (test)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-ui
+          file: ./admin-ui/Dockerfile
+          push: false
+          tags: switchboard-admin-ui:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Validate docker-compose
         run: docker compose config --quiet
