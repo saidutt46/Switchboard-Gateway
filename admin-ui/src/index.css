@@ -93,6 +93,11 @@ body {
   min-height: 100vh;
 }
 
+@keyframes fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

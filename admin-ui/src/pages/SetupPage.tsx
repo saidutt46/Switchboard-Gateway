@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, ShieldCheck, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { setup as apiSetup } from '../api/auth'
 import { cn } from '../lib/cn'
@@ -66,10 +65,10 @@ const PASSWORD_RULES = [
 ]
 
 export function SetupPage() {
-  const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [success, setSuccess] = useState(false)
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<SetupForm>()
   const watchPassword = watch('password', '')
@@ -84,7 +83,9 @@ export function SetupPage() {
         password: data.password,
         email: data.email || undefined,
       })
-      navigate('/login')
+      setSuccess(true)
+      // Full reload so AuthGuard re-checks /auth/status
+      setTimeout(() => { window.location.href = '/login' }, 2000)
     } catch (err) {
       const message = await parseApiError(err)
       setError(message)
@@ -114,6 +115,20 @@ export function SetupPage() {
 
         {/* Card */}
         <div className="rounded-2xl border bg-card p-8 shadow-xl shadow-black/[0.04] dark:shadow-black/[0.2]">
+          {/* Success state */}
+          {success ? (
+            <div className="flex flex-col items-center py-4 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 mb-4">
+                <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h2 className="text-base font-semibold text-foreground">Account Created</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">Redirecting to login...</p>
+              <div className="mt-4 h-1 w-24 rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full animate-[fill_2s_ease-in-out_forwards]" style={{ animation: 'fill 2s ease-in-out forwards' }} />
+              </div>
+            </div>
+          ) : (
+          <>
           {/* Header with shield icon */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2">
@@ -246,6 +261,8 @@ export function SetupPage() {
               )}
             </button>
           </form>
+          </>
+          )}
         </div>
 
         <p className="mt-6 text-center text-[11px] text-muted-foreground/50 font-mono">
