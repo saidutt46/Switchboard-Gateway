@@ -4,7 +4,7 @@ import { Pencil, Trash2, Plus } from 'lucide-react'
 import { Header } from '../components/layout/Header'
 import { SlidePanel } from '../components/shared/SlidePanel'
 import { ConfirmDialog } from '../components/shared/ConfirmDialog'
-import { LoadingSkeleton } from '../components/shared/LoadingSkeleton'
+import { DetailSkeleton } from '../components/shared/DetailSkeleton'
 import { ConsumerForm } from '../components/consumers/ConsumerForm'
 import { ApiKeyList } from '../components/consumers/ApiKeyList'
 import { ApiKeyGenerateDialog } from '../components/consumers/ApiKeyGenerateDialog'
@@ -72,7 +72,7 @@ export function ConsumerDetailPage() {
     return (
       <div>
         <Header breadcrumbs={[{ label: 'Consumers' }, { label: 'Loading...' }]} />
-        <div className="mx-auto max-w-5xl p-6"><LoadingSkeleton /></div>
+        <div className="mx-auto max-w-5xl p-6"><DetailSkeleton /></div>
       </div>
     )
   }

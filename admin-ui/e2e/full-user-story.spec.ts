@@ -30,13 +30,16 @@ test.describe.serial('Full User Story', () => {
     await page.getByRole('button', { name: 'New Route' }).click()
     await expect(page.getByPlaceholder('my-api-routes')).toBeVisible({ timeout: 5000 })
 
-    const serviceSelect = page.locator('select').first()
-    await serviceSelect.selectOption({ label: serviceName })
+    // Select service from the form's select (inside the slide panel, not the filter)
+    const formSelect = page.locator('form select').first()
+    // Wait for options to load
+    await expect(formSelect.locator('option')).not.toHaveCount(1, { timeout: 5000 })
+    await formSelect.selectOption({ label: serviceName })
     await page.getByPlaceholder('my-api-routes').fill(routeName)
-    await page.locator('textarea').fill('/e2e-test\n/e2e-test/:id')
+    await page.locator('form textarea').fill('/e2e-test\n/e2e-test/:id')
 
-    await page.getByRole('button', { name: 'Create Route' }).click()
-    await expect(page.locator('table').getByText(routeName)).toBeVisible({ timeout: 5000 })
+    await page.locator('form').getByRole('button', { name: 'Create Route' }).click()
+    await expect(page.locator('table').getByText(routeName)).toBeVisible({ timeout: 8000 })
   })
 
   test('4. Dashboard loads', async ({ page }) => {

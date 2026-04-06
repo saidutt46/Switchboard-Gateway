@@ -8,7 +8,7 @@ import { SlidePanel } from '../components/shared/SlidePanel'
 import { ConfirmDialog } from '../components/shared/ConfirmDialog'
 import { ServiceForm } from '../components/services/ServiceForm'
 import { RouteForm } from '../components/routes/RouteForm'
-import { LoadingSkeleton } from '../components/shared/LoadingSkeleton'
+import { DetailSkeleton } from '../components/shared/DetailSkeleton'
 import { useService, useServiceStats, useUpdateService, useDeleteService } from '../hooks/useServices'
 import { useRoutes, useCreateRoute } from '../hooks/useRoutes'
 import { usePlugins } from '../hooks/usePlugins'
@@ -72,7 +72,7 @@ export function ServiceDetailPage() {
     return (
       <div>
         <Header breadcrumbs={[{ label: 'Services' }, { label: 'Loading...' }]} />
-        <div className="mx-auto max-w-5xl p-6"><LoadingSkeleton /></div>
+        <div className="mx-auto max-w-5xl p-6"><DetailSkeleton /></div>
       </div>
     )
   }

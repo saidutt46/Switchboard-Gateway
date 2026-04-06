@@ -6,7 +6,7 @@ import { StatusBadge } from '../components/shared/StatusBadge'
 import { SlidePanel } from '../components/shared/SlidePanel'
 import { ConfirmDialog } from '../components/shared/ConfirmDialog'
 import { PluginForm } from '../components/plugins/PluginForm'
-import { LoadingSkeleton } from '../components/shared/LoadingSkeleton'
+import { DetailSkeleton } from '../components/shared/DetailSkeleton'
 import { usePlugin, useUpdatePlugin, useDeletePlugin } from '../hooks/usePlugins'
 import { useService } from '../hooks/useServices'
 import { useRoute } from '../hooks/useRoutes'
@@ -65,7 +65,7 @@ export function PluginDetailPage() {
     return (
       <div>
         <Header breadcrumbs={[{ label: 'Plugins' }, { label: 'Loading...' }]} />
-        <div className="mx-auto max-w-5xl p-6"><LoadingSkeleton /></div>
+        <div className="mx-auto max-w-5xl p-6"><DetailSkeleton /></div>
       </div>
     )
   }

@@ -403,6 +403,50 @@ Real benchmarks from load testing:
 | 🎛️ **Admin API** | Full REST API—no config files needed |
 | 🔌 **Plugin System** | Extensible architecture for custom logic |
 | 📊 **Structured Logging** | JSON logs with request tracing |
+| 🖥️ **Admin Dashboard** | React UI for visual gateway management |
+
+---
+
+## 🖥️ Admin Dashboard
+
+Switchboard includes a full **Admin UI** for managing your gateway visually — no curl needed.
+
+### Features
+
+- **Dashboard** — System health monitoring, entity counts, analytics charts (HTTP methods, plugin distribution, active rate gauge)
+- **Services** — Create, edit, delete, enable/disable backend services with full config (timeouts, retries, load balancing)
+- **Routes** — Map paths to services with method selection, service filtering, and search
+- **Consumers** — Manage API clients with full key lifecycle (generate, enable/disable, revoke). One-time key display with copy-to-clipboard
+- **Plugins** — Dynamic config editors for all 6 plugin types. Scope to global, service, route, or consumer
+- **Dark/Light Mode** — Theme toggle with persistence
+- **Collapsible Sidebar** — Full or icon-only navigation
+- **Search & Filtering** — On all list pages with entity-specific filters
+- **Error Notifications** — Parses API error responses and displays meaningful messages
+
+### Quick Start
+
+```bash
+# Development (hot reload)
+cd admin-ui
+npm install
+npm run dev
+# Open http://localhost:5173
+
+# Production (Docker)
+docker compose up -d
+# Open http://localhost:4000
+```
+
+### Tech Stack
+
+React 19 | TypeScript | Vite | Tailwind CSS v4 | Headless UI | TanStack Query | React Hook Form | Recharts
+
+### Testing
+
+```bash
+npm run test        # 31 unit tests (Vitest)
+npm run test:e2e    # 18 e2e tests (Playwright)
+```
 
 ---
 
@@ -424,13 +468,12 @@ Real benchmarks from load testing:
 ## 🏗️ Architecture
 
 ```
-                                    ┌─────────────────┐
-                                    │   Admin API     │
-                                    │  (Python/Fast)  │
-                                    │    :8000        │
-                                    └────────┬────────┘
-                                             │ CRUD Operations
-                                             ▼
+┌─────────────────┐    ┌─────────────────┐
+│   Admin UI      │───▶│   Admin API     │
+│  (React :4000)  │    │  (Python :8000) │
+└─────────────────┘    └────────┬────────┘
+                                │ CRUD Operations
+                                ▼
 ┌──────────┐    ┌─────────────────────────────────────────────────┐
 │  Client  │───▶│           Switchboard Gateway (:8080)           │
 └──────────┘    │                                                 │
@@ -521,14 +564,15 @@ curl -H "X-API-Key: <your-key>" http://localhost:8080/api
 
 ## 🐳 Docker Deployment
 
-### Two Docker Images
+### Three Docker Packages
 
-Switchboard uses a **2-package architecture** for optimal performance and scaling:
+Switchboard uses a **3-package architecture** for optimal performance and scaling:
 
 | Package | Purpose | Size | Scaling Strategy |
 |---------|---------|------|------------------|
-| **Gateway** (`gateway:v0.7.0`) | High-performance traffic routing | ~20MB | Horizontal (1-100+ instances) |
-| **Admin API** (`admin-api:v0.7.0`) | Configuration management | ~200MB | Minimal (1-2 instances) |
+| **Gateway** | High-performance traffic routing (Go) | ~20MB | Horizontal (1-100+ instances) |
+| **Admin API** | Configuration management REST API (Python) | ~200MB | Minimal (1-2 instances) |
+| **Admin UI** | React dashboard (nginx) | ~25MB | Minimal (1 instance) |
 
 ### Deployment Options
 
@@ -542,8 +586,9 @@ docker-compose logs -f gateway
 docker-compose logs -f admin-api
 
 # Check health
-curl http://localhost:8080/health
-curl http://localhost:8000/health
+curl http://localhost:8080/health   # Gateway
+curl http://localhost:8000/health   # Admin API
+open http://localhost:4000          # Admin UI
 ```
 
 **Option 2: Pull Pre-built Images (Production)**
@@ -617,20 +662,30 @@ k6 run tests/load/stress.js
 
 ```
 switchboard-gateway/
-├── cmd/gateway/           # Gateway entrypoint
+├── cmd/gateway/           # Gateway entrypoint (Go)
 ├── internal/
 │   ├── cache/             # Response caching
 │   ├── config/            # Config & hot reload
 │   ├── database/          # PostgreSQL repository
 │   ├── plugin/            # Plugin system
-│   │   └── builtin/       # Built-in plugins
+│   │   └── builtin/       # Built-in plugins (auth, rate-limit, cache, cors, logger)
 │   ├── proxy/             # Reverse proxy
-│   ├── ratelimit/         # Rate limiting
+│   ├── ratelimit/         # Rate limiting algorithms
 │   └── router/            # Radix tree routing
-├── admin-api/             # Python Admin API
-├── tests/                 # Test suites
-├── docker-compose.yml     # Development stack
-└── schema.sql             # Database schema
+├── admin-api/             # Python FastAPI Admin API
+├── admin-ui/              # React Admin Dashboard
+│   ├── src/
+│   │   ├── api/           # Typed API client layer
+│   │   ├── components/    # UI components (layout, shared, entity forms)
+│   │   ├── hooks/         # TanStack Query hooks
+│   │   ├── pages/         # Route pages (Dashboard, Services, Routes, etc.)
+│   │   └── lib/           # Utilities (formatters, constants, error parser)
+│   ├── e2e/               # Playwright e2e tests
+│   ├── Dockerfile         # Multi-stage build (Node -> nginx)
+│   └── nginx.conf         # SPA serving + API reverse proxy
+├── tests/                 # Go test suites + manual scripts
+├── docker-compose.yml     # Full development stack (8 services)
+└── schema.sql             # Database schema + seed data
 ```
 
 ---

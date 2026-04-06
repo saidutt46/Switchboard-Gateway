@@ -4,9 +4,9 @@ test.describe('Dashboard', () => {
   test('loads and shows health status', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByText('System Health')).toBeVisible()
-    await expect(page.getByText('Gateway')).toBeVisible()
-    await expect(page.getByText('Database')).toBeVisible()
-    await expect(page.getByText('Redis')).toBeVisible()
+    await expect(page.getByText('Gateway', { exact: true })).toBeVisible()
+    await expect(page.getByText('Database', { exact: true })).toBeVisible()
+    await expect(page.getByText('Redis', { exact: true })).toBeVisible()
   })
 
   test('shows overview section', async ({ page }) => {
