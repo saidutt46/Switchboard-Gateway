@@ -17,6 +17,8 @@ import { ConsumerDetailPage } from './pages/ConsumerDetailPage'
 import { PluginsPage } from './pages/PluginsPage'
 import { PluginDetailPage } from './pages/PluginDetailPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { UsersPage } from './pages/UsersPage'
+import { ProfilePage } from './pages/ProfilePage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +56,8 @@ export default function App() {
                   <Route path="/consumers/:id" element={<ConsumerDetailPage />} />
                   <Route path="/plugins" element={<PluginsPage />} />
                   <Route path="/plugins/:id" element={<PluginDetailPage />} />
+                  <Route path="/settings/users" element={<UsersPage />} />
+                  <Route path="/settings/profile" element={<ProfilePage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>
               </Routes>
