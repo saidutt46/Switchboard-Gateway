@@ -27,6 +27,6 @@ describe('Header', () => {
   it('last breadcrumb has font-medium styling', () => {
     render(<Header breadcrumbs={[{ label: 'Parent' }, { label: 'Current' }]} />)
     const current = screen.getByText('Current')
-    expect(current.className).toContain('font-medium')
+    expect(current.className).toContain('font-semibold')
   })
 })
