@@ -6,12 +6,14 @@ from contextlib import asynccontextmanager
 import logging
 
 from config import get_settings
-from database import init_db, check_db_connection
+from database import init_db, check_db_connection, SessionLocal
 from pydantic import BaseModel
 import redis
 
 # Import routers
 from routers import services, routes, consumers, plugins
+from routers.auth import router as auth_router, seed_admin_from_env
+from auth import get_current_user, require_write_access
 
 class HealthResponse(BaseModel):
     """Health check response model."""
@@ -19,16 +21,6 @@ class HealthResponse(BaseModel):
     version: str
     database: str
     redis: str
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": "healthy",
-                "version": "1.0.0",
-                "database": "healthy",
-                "redis": "healthy"
-            }
-        }
 
 class RootResponse(BaseModel):
     """Root endpoint response model."""
@@ -37,17 +29,6 @@ class RootResponse(BaseModel):
     environment: str
     docs: str
     health: str
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "name": "Switchboard Admin API",
-                "version": "1.0.0",
-                "environment": "development",
-                "docs": "/docs",
-                "health": "/health"
-            }
-        }
 
 # Configure logging
 logging.basicConfig(
@@ -64,17 +45,24 @@ async def lifespan(app: FastAPI):
     """Lifespan events - startup and shutdown."""
     # Startup
     logger.info("Starting Switchboard Admin API...")
-    
+
     # Check database connection
     if not check_db_connection():
         logger.error("Failed to connect to database!")
         raise Exception("Database connection failed")
-    
+
     logger.info("Database connection established")
-    
+
     # Initialize database tables
     init_db()
-    
+
+    # Seed admin user from environment variables
+    db = SessionLocal()
+    try:
+        seed_admin_from_env(db)
+    finally:
+        db.close()
+
     # Check Redis connection
     try:
         r = redis.from_url(settings.redis_url)
@@ -82,40 +70,38 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connection established")
     except Exception as e:
         logger.warning(f"Redis connection failed: {e}")
-    
+
     logger.info("Admin API ready!")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down Admin API...")
 
 
-# Create FastAPI app
 # Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="""
     ## Switchboard Admin API
-    
+
     REST API for managing Switchboard API Gateway configuration.
-    
+
     ### Features
     - **Services**: Manage backend microservices
     - **Routes**: Configure request routing rules
     - **Consumers**: Manage API consumers and authentication
     - **Plugins**: Configure gateway plugins (auth, rate limiting, caching, etc.)
-    
+
     ### Authentication
-    Currently no authentication required for development. Production deployments
-    should add authentication middleware.
+    All management endpoints require JWT authentication.
+    Use `/auth/login` to obtain tokens.
     """,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    # Enhanced metadata
     contact={
         "name": "Switchboard Gateway",
         "url": "https://github.com/saidutt46/Switchboard-Gateway",
@@ -125,22 +111,11 @@ app = FastAPI(
         "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
     },
     openapi_tags=[
-        {
-            "name": "Services",
-            "description": "Manage backend microservices that handle requests",
-        },
-        {
-            "name": "Routes",
-            "description": "Configure routing rules (paths, methods, hosts)",
-        },
-        {
-            "name": "Consumers",
-            "description": "Manage API consumers and their API keys",
-        },
-        {
-            "name": "Plugins",
-            "description": "Configure gateway plugins (auth, rate limiting, CORS, etc.)",
-        },
+        {"name": "Auth", "description": "Authentication, user management, and setup"},
+        {"name": "Services", "description": "Manage backend microservices that handle requests"},
+        {"name": "Routes", "description": "Configure routing rules (paths, methods, hosts)"},
+        {"name": "Consumers", "description": "Manage API consumers and their API keys"},
+        {"name": "Plugins", "description": "Configure gateway plugins (auth, rate limiting, CORS, etc.)"},
     ],
 )
 
@@ -153,21 +128,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(services.router, prefix="/services", tags=["Services"])
-app.include_router(routes.router, prefix="/routes", tags=["Routes"])
-app.include_router(consumers.router, prefix="/consumers", tags=["Consumers"])
-app.include_router(plugins.router, prefix="/plugins", tags=["Plugins"])
+# Auth router (public — login, setup, status)
+app.include_router(auth_router)
+
+# Protected routers — require JWT auth
+app.include_router(services.router, prefix="/services", tags=["Services"], dependencies=[Depends(get_current_user)])
+app.include_router(routes.router, prefix="/routes", tags=["Routes"], dependencies=[Depends(get_current_user)])
+app.include_router(consumers.router, prefix="/consumers", tags=["Consumers"], dependencies=[Depends(get_current_user)])
+app.include_router(plugins.router, prefix="/plugins", tags=["Plugins"], dependencies=[Depends(get_current_user)])
 
 
-@app.get(
-    "/",
-    response_model=RootResponse,
-    summary="API Information",
-    description="Get basic information about the Admin API",
-)
+@app.get("/", response_model=RootResponse, summary="API Information")
 async def root():
-    """Root endpoint with API metadata and important links."""
+    """Root endpoint with API metadata."""
     return {
         "name": settings.app_name,
         "version": settings.app_version,
@@ -176,17 +149,11 @@ async def root():
         "health": "/health",
     }
 
-@app.get(
-    "/health",
-    response_model=HealthResponse,
-    summary="Health Check",
-    description="Check the health status of Admin API and its dependencies",
-)
+@app.get("/health", response_model=HealthResponse, summary="Health Check")
 async def health():
-    """Health check endpoint with detailed status of all components."""
+    """Health check endpoint — always public."""
     db_status = "healthy" if check_db_connection() else "unhealthy"
-    
-    # Check Redis
+
     redis_status = "unhealthy"
     try:
         r = redis.from_url(settings.redis_url)
@@ -194,7 +161,7 @@ async def health():
         redis_status = "healthy"
     except Exception:
         pass
-    
+
     return {
         "status": "healthy" if db_status == "healthy" else "degraded",
         "version": settings.app_version,

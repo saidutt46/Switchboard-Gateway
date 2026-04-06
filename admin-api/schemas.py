@@ -199,6 +199,64 @@ class PluginResponse(PluginBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
-    
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================================================
+# Auth Schemas
+# ============================================================================
+
+class AuthSetup(BaseModel):
+    """Schema for initial admin setup."""
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=8, max_length=128)
+    email: Optional[str] = Field(None, max_length=255)
+
+
+class AuthLogin(BaseModel):
+    """Schema for login."""
+    username: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
+class AuthTokens(BaseModel):
+    """Schema for JWT token response."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class AuthRefresh(BaseModel):
+    """Schema for token refresh."""
+    refresh_token: str
+
+
+class AdminUserCreate(BaseModel):
+    """Schema for creating an admin user."""
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=8, max_length=128)
+    email: Optional[str] = Field(None, max_length=255)
+    role: str = Field(default="admin", pattern="^(admin|viewer)$")
+
+
+class AdminUserUpdate(BaseModel):
+    """Schema for updating an admin user."""
+    email: Optional[str] = Field(None, max_length=255)
+    role: Optional[str] = Field(None, pattern="^(admin|viewer)$")
+    password: Optional[str] = Field(None, min_length=8, max_length=128)
+
+
+class AdminUserResponse(BaseModel):
+    """Schema for admin user response (no password)."""
+    id: UUID
+    username: str
+    email: Optional[str]
+    role: str
+    created_at: datetime
+    updated_at: datetime
+
     class Config:
         from_attributes = True

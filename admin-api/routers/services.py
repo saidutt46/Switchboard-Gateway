@@ -10,6 +10,7 @@ from database import get_db
 from models import Service as ServiceModel
 from schemas import ServiceCreate, ServiceUpdate, ServiceResponse
 from events import publish_service_change
+from auth import require_write_access
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,8 @@ router = APIRouter()
 @router.post("", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
 def create_service(
     service: ServiceCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Create a new service.
@@ -163,7 +165,8 @@ def get_service(
 def update_service(
     service_id: UUID,
     service_update: ServiceUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Update a service.
@@ -250,7 +253,8 @@ def update_service(
 @router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_service(
     service_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Delete a service.

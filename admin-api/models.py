@@ -175,3 +175,19 @@ class Plugin(Base):
             name="plugins_scope_check"
         ),
     )
+
+
+class AdminUser(Base):
+    """Admin user model - authentication for the admin API/UI."""
+
+    __tablename__ = "admin_users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String(100), unique=True, nullable=False)
+    email = Column(String(255), nullable=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="admin")  # admin | viewer
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
