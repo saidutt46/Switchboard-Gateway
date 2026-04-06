@@ -26,7 +26,7 @@ const STAT_CONFIG = [
 export function ServiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: service, isLoading } = useService(id!)
   const { data: stats } = useServiceStats(id!)
   const { data: serviceRoutes } = useRoutes({ service_id: id! })
@@ -42,14 +42,14 @@ export function ServiceDetailPage() {
   const handleEdit = (data: ServiceCreate) => {
     updateMutation.mutate({ id: id!, data }, {
       onSuccess: () => { setEditOpen(false); toast('success', 'Service updated') },
-      onError: () => toast('error', 'Failed to update service'),
+      onError: (err) => toastApiError(err, 'Failed to update service'),
     })
   }
 
   const handleDelete = () => {
     deleteMutation.mutate(id!, {
       onSuccess: () => { toast('success', 'Service deleted'); navigate('/services') },
-      onError: () => toast('error', 'Failed to delete service'),
+      onError: (err) => toastApiError(err, 'Failed to delete service'),
     })
   }
 
@@ -64,7 +64,7 @@ export function ServiceDetailPage() {
   const handleAddRoute = (data: RouteCreate) => {
     createRouteMutation.mutate(data, {
       onSuccess: () => { setAddRouteOpen(false); toast('success', 'Route created') },
-      onError: () => toast('error', 'Failed to create route'),
+      onError: (err) => toastApiError(err, 'Failed to create route'),
     })
   }
 

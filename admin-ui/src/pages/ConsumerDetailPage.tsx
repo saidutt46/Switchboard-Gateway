@@ -17,7 +17,7 @@ import type { ConsumerCreate, ApiKeyGenerated } from '../api/types'
 export function ConsumerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: consumer, isLoading } = useConsumer(id!)
   const { data: keys } = useApiKeys(id!)
   const updateMutation = useUpdateConsumer()
@@ -35,28 +35,28 @@ export function ConsumerDetailPage() {
   const handleEdit = (data: ConsumerCreate) => {
     updateMutation.mutate({ id: id!, data }, {
       onSuccess: () => { setEditOpen(false); toast('success', 'Consumer updated') },
-      onError: () => toast('error', 'Failed to update consumer'),
+      onError: (err) => toastApiError(err, 'Failed to update consumer'),
     })
   }
 
   const handleDelete = () => {
     deleteMutation.mutate(id!, {
       onSuccess: () => { toast('success', 'Consumer deleted'); navigate('/consumers') },
-      onError: () => toast('error', 'Failed to delete consumer'),
+      onError: (err) => toastApiError(err, 'Failed to delete consumer'),
     })
   }
 
   const handleGenerate = (name: string) => {
     generateMutation.mutate({ consumerId: id!, name: name || undefined }, {
       onSuccess: (data) => setGeneratedKey(data),
-      onError: () => toast('error', 'Failed to generate key'),
+      onError: (err) => toastApiError(err, 'Failed to generate key'),
     })
   }
 
   const handleToggleKey = (keyId: string, enable: boolean) => {
     toggleKeyMutation.mutate({ consumerId: id!, keyId, enable }, {
       onSuccess: () => toast('success', `Key ${enable ? 'enabled' : 'disabled'}`),
-      onError: () => toast('error', 'Failed to update key'),
+      onError: (err) => toastApiError(err, 'Failed to update key'),
     })
   }
 
@@ -64,7 +64,7 @@ export function ConsumerDetailPage() {
     if (!revokeKeyId) return
     revokeKeyMutation.mutate({ consumerId: id!, keyId: revokeKeyId }, {
       onSuccess: () => { setRevokeKeyId(null); toast('success', 'Key revoked') },
-      onError: () => toast('error', 'Failed to revoke key'),
+      onError: (err) => toastApiError(err, 'Failed to revoke key'),
     })
   }
 

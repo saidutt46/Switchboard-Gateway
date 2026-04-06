@@ -15,7 +15,7 @@ import type { Service, ServiceCreate } from '../api/types'
 
 export function ServicesPage() {
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: services, isLoading } = useServices()
   const createMutation = useCreateService()
   const updateMutation = useUpdateService()
@@ -32,7 +32,7 @@ export function ServicesPage() {
         setCreateOpen(false)
         toast('success', 'Service created')
       },
-      onError: () => toast('error', 'Failed to create service'),
+      onError: (err) => toastApiError(err, 'Failed to create service'),
     })
   }
 
@@ -45,7 +45,7 @@ export function ServicesPage() {
           setEditService(null)
           toast('success', 'Service updated')
         },
-        onError: () => toast('error', 'Failed to update service'),
+        onError: (err) => toastApiError(err, 'Failed to update service'),
       }
     )
   }
@@ -55,7 +55,7 @@ export function ServicesPage() {
       { id: service.id, data: { enabled: !service.enabled } },
       {
         onSuccess: () => toast('success', `Service ${service.enabled ? 'disabled' : 'enabled'}`),
-        onError: () => toast('error', 'Failed to update service'),
+        onError: (err) => toastApiError(err, 'Failed to update service'),
       }
     )
   }
@@ -67,7 +67,7 @@ export function ServicesPage() {
         setDeleteService(null)
         toast('success', 'Service deleted')
       },
-      onError: () => toast('error', 'Failed to delete service'),
+      onError: (err) => toastApiError(err, 'Failed to delete service'),
     })
   }
 

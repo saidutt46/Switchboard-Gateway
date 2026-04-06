@@ -15,7 +15,7 @@ import type { Consumer, ConsumerCreate } from '../api/types'
 
 export function ConsumersPage() {
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: consumers, isLoading } = useConsumers()
   const createMutation = useCreateConsumer()
   const updateMutation = useUpdateConsumer()
@@ -37,7 +37,7 @@ export function ConsumersPage() {
   const handleCreate = (data: ConsumerCreate) => {
     createMutation.mutate(data, {
       onSuccess: () => { setCreateOpen(false); toast('success', 'Consumer created') },
-      onError: () => toast('error', 'Failed to create consumer'),
+      onError: (err) => toastApiError(err, 'Failed to create consumer'),
     })
   }
 
@@ -45,7 +45,7 @@ export function ConsumersPage() {
     if (!editConsumer) return
     updateMutation.mutate({ id: editConsumer.id, data }, {
       onSuccess: () => { setEditConsumer(null); toast('success', 'Consumer updated') },
-      onError: () => toast('error', 'Failed to update consumer'),
+      onError: (err) => toastApiError(err, 'Failed to update consumer'),
     })
   }
 
@@ -53,7 +53,7 @@ export function ConsumersPage() {
     if (!deleteConsumer) return
     deleteMutation.mutate(deleteConsumer.id, {
       onSuccess: () => { setDeleteConsumer(null); toast('success', 'Consumer deleted') },
-      onError: () => toast('error', 'Failed to delete consumer'),
+      onError: (err) => toastApiError(err, 'Failed to delete consumer'),
     })
   }
 

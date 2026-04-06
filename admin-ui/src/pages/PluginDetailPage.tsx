@@ -28,7 +28,7 @@ const PLUGIN_LABELS: Record<string, { label: string; category: string }> = {
 export function PluginDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: plugin, isLoading } = usePlugin(id!)
   const { data: linkedService } = useService(plugin?.service_id || '')
   const { data: linkedRoute } = useRoute(plugin?.route_id || '')
@@ -42,14 +42,14 @@ export function PluginDetailPage() {
   const handleEdit = (data: PluginCreate) => {
     updateMutation.mutate({ id: id!, data }, {
       onSuccess: () => { setEditOpen(false); toast('success', 'Plugin updated') },
-      onError: () => toast('error', 'Failed to update plugin'),
+      onError: (err) => toastApiError(err, 'Failed to update plugin'),
     })
   }
 
   const handleDelete = () => {
     deleteMutation.mutate(id!, {
       onSuccess: () => { toast('success', 'Plugin deleted'); navigate('/plugins') },
-      onError: () => toast('error', 'Failed to delete plugin'),
+      onError: (err) => toastApiError(err, 'Failed to delete plugin'),
     })
   }
 

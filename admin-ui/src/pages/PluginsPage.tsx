@@ -16,7 +16,7 @@ import type { Plugin, PluginCreate } from '../api/types'
 
 export function PluginsPage() {
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: plugins, isLoading } = usePlugins()
   const createMutation = useCreatePlugin()
   const updateMutation = useUpdatePlugin()
@@ -38,7 +38,7 @@ export function PluginsPage() {
   const handleCreate = (data: PluginCreate) => {
     createMutation.mutate(data, {
       onSuccess: () => { setCreateOpen(false); toast('success', 'Plugin created') },
-      onError: () => toast('error', 'Failed to create plugin'),
+      onError: (err) => toastApiError(err, 'Failed to create plugin'),
     })
   }
 
@@ -46,7 +46,7 @@ export function PluginsPage() {
     if (!editPlugin) return
     updateMutation.mutate({ id: editPlugin.id, data }, {
       onSuccess: () => { setEditPlugin(null); toast('success', 'Plugin updated') },
-      onError: () => toast('error', 'Failed to update plugin'),
+      onError: (err) => toastApiError(err, 'Failed to update plugin'),
     })
   }
 
@@ -55,7 +55,7 @@ export function PluginsPage() {
       { id: plugin.id, data: { enabled: !plugin.enabled } },
       {
         onSuccess: () => toast('success', `Plugin ${plugin.enabled ? 'disabled' : 'enabled'}`),
-        onError: () => toast('error', 'Failed to update plugin'),
+        onError: (err) => toastApiError(err, 'Failed to update plugin'),
       }
     )
   }
@@ -64,7 +64,7 @@ export function PluginsPage() {
     if (!deletePlugin) return
     deleteMutation.mutate(deletePlugin.id, {
       onSuccess: () => { setDeletePlugin(null); toast('success', 'Plugin deleted') },
-      onError: () => toast('error', 'Failed to delete plugin'),
+      onError: (err) => toastApiError(err, 'Failed to delete plugin'),
     })
   }
 

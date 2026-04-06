@@ -17,7 +17,7 @@ import type { Route, RouteCreate } from '../api/types'
 
 export function RoutesPage() {
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: routes, isLoading } = useRoutes()
   const createMutation = useCreateRoute()
   const updateMutation = useUpdateRoute()
@@ -43,7 +43,7 @@ export function RoutesPage() {
   const handleCreate = (data: RouteCreate) => {
     createMutation.mutate(data, {
       onSuccess: () => { setCreateOpen(false); toast('success', 'Route created') },
-      onError: () => toast('error', 'Failed to create route'),
+      onError: (err) => toastApiError(err, 'Failed to create route'),
     })
   }
 
@@ -53,7 +53,7 @@ export function RoutesPage() {
       { id: editRoute.id, data },
       {
         onSuccess: () => { setEditRoute(null); toast('success', 'Route updated') },
-        onError: () => toast('error', 'Failed to update route'),
+        onError: (err) => toastApiError(err, 'Failed to update route'),
       }
     )
   }
@@ -63,7 +63,7 @@ export function RoutesPage() {
       { id: route.id, data: { enabled: !route.enabled } },
       {
         onSuccess: () => toast('success', `Route ${route.enabled ? 'disabled' : 'enabled'}`),
-        onError: () => toast('error', 'Failed to update route'),
+        onError: (err) => toastApiError(err, 'Failed to update route'),
       }
     )
   }
@@ -72,7 +72,7 @@ export function RoutesPage() {
     if (!deleteRoute) return
     deleteMutation.mutate(deleteRoute.id, {
       onSuccess: () => { setDeleteRoute(null); toast('success', 'Route deleted') },
-      onError: () => toast('error', 'Failed to delete route'),
+      onError: (err) => toastApiError(err, 'Failed to delete route'),
     })
   }
 

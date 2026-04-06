@@ -19,7 +19,7 @@ import type { RouteCreate } from '../api/types'
 export function RouteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { toast } = useToast()
+  const { toast, toastApiError } = useToast()
   const { data: route, isLoading } = useRoute(id!)
   const { data: parentService } = useService(route?.service_id || '')
   const { data: routePlugins } = usePlugins(route ? { route_id: route.id } : undefined)
@@ -32,14 +32,14 @@ export function RouteDetailPage() {
   const handleEdit = (data: RouteCreate) => {
     updateMutation.mutate({ id: id!, data }, {
       onSuccess: () => { setEditOpen(false); toast('success', 'Route updated') },
-      onError: () => toast('error', 'Failed to update route'),
+      onError: (err) => toastApiError(err, 'Failed to update route'),
     })
   }
 
   const handleDelete = () => {
     deleteMutation.mutate(id!, {
       onSuccess: () => { toast('success', 'Route deleted'); navigate('/routes') },
-      onError: () => toast('error', 'Failed to delete route'),
+      onError: (err) => toastApiError(err, 'Failed to delete route'),
     })
   }
 
