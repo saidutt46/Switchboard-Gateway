@@ -7,6 +7,8 @@ tests/results/
 *.json
 !schema.json
 !package.json
+!tsconfig.json
+!tsconfig.*.json
 
 # Binaries
 bin/
@@ -94,7 +96,6 @@ analytics/venv/
 
 # Node modules (if using any JS tools)
 node_modules/
-package-lock.json
 yarn.lock
 
 # OS files

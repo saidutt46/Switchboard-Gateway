@@ -374,6 +374,37 @@ redis-monitor: ## Monitor Redis commands in real-time
 redis-stats: ## Show Redis statistics
 	@docker exec -it switchboard-redis redis-cli INFO stats
 
+##@ Admin UI
+
+ui-install: ## Install Admin UI dependencies
+	@echo "$(COLOR_GREEN)Installing Admin UI dependencies...$(COLOR_RESET)"
+	@cd admin-ui && npm install
+	@echo "$(COLOR_GREEN)✓ Admin UI dependencies installed$(COLOR_RESET)"
+
+ui-dev: ## Start Admin UI dev server (port 5173)
+	@echo "$(COLOR_GREEN)Starting Admin UI dev server...$(COLOR_RESET)"
+	@cd admin-ui && npm run dev
+
+ui-build: ## Build Admin UI for production
+	@echo "$(COLOR_GREEN)Building Admin UI...$(COLOR_RESET)"
+	@cd admin-ui && npm run build
+	@echo "$(COLOR_GREEN)✓ Admin UI built$(COLOR_RESET)"
+
+ui-test: ## Run Admin UI unit tests
+	@echo "$(COLOR_GREEN)Running Admin UI unit tests...$(COLOR_RESET)"
+	@cd admin-ui && npm run test
+	@echo "$(COLOR_GREEN)✓ Unit tests passed$(COLOR_RESET)"
+
+ui-test-e2e: ## Run Admin UI e2e tests (requires services running)
+	@echo "$(COLOR_GREEN)Running Admin UI e2e tests...$(COLOR_RESET)"
+	@cd admin-ui && npm run test:e2e
+	@echo "$(COLOR_GREEN)✓ E2E tests passed$(COLOR_RESET)"
+
+ui-docker: ## Build Admin UI Docker image
+	@echo "$(COLOR_GREEN)Building Admin UI Docker image...$(COLOR_RESET)"
+	@docker build -t switchboard-admin-ui:$(VERSION) ./admin-ui
+	@echo "$(COLOR_GREEN)✓ Admin UI image built$(COLOR_RESET)"
+
 ##@ Admin API
 
 admin-install: ## Install Admin API dependencies

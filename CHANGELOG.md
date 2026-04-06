@@ -12,11 +12,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Circuit breaker plugin
 - WebSocket support
 
-### Changed
-- Improved rate limiting performance
+---
 
-### Fixed
-- Memory leak in connection pooling
+## [0.8.0] - 2026-04-06
+
+### Added
+- **Admin UI**: Full React 19 dashboard for gateway management
+  - Dashboard with system health, entity counts, and analytics charts (HTTP methods, plugin scopes, active rate gauge, plugin types)
+  - Services CRUD: create, edit, delete, enable/disable toggle
+  - Routes CRUD: create with service selector, path/method editors, filter by service
+  - Consumers CRUD: create, edit, delete with full API key lifecycle (generate, enable/disable, revoke)
+  - Plugins CRUD: dynamic config editors for all 6 plugin types (api-key-auth, jwt-auth, rate-limit, cache, cors, request-logger), generic JSON fallback
+  - Collapsible sidebar with navigation, health indicators, and dark/light theme toggle
+  - Search and filtering on all list pages
+  - Slide panels for create/edit forms
+  - Contextual actions: "Add Route" on service detail, "Add Plugin" on route detail
+  - Detail page skeleton loaders
+  - Notification system with error parsing (displays API error details from 409, 422, etc.)
+- **Tech Stack**: React 19, TypeScript, Vite, Tailwind CSS v4, Headless UI, TanStack Query, React Hook Form, Recharts, Lucide icons
+- **Design**: DM Sans + JetBrains Mono typography, warm slate color palette, gunmetal sidebar, colorful entity-typed charts
+- **Testing**: 31 Vitest unit tests, 18 Playwright e2e tests covering full CRUD flows
+- **Docker**: Multi-stage build (Node -> nginx), API reverse proxy, serves at port 4000
+- **Makefile**: `ui-install`, `ui-dev`, `ui-build`, `ui-test`, `ui-test-e2e`, `ui-docker` targets
+
+### Changed
+- Renamed seed data from `user-service` to `example-httpbin` for clarity
+- Added `redis_url` to seed rate-limit plugin config (fixes Docker networking issue)
+- Fixed `.gitignore` for TypeScript config files and `package-lock.json`
+- Added admin-ui service to `docker-compose.yml` (port 4000)
 
 ---
 

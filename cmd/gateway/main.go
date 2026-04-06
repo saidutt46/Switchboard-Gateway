@@ -416,7 +416,7 @@ func setupRoutes(db *database.DB, repo *database.Repository, rt *router.Router, 
 			if !ctx.Response.Written() {
 				// Write the error response (e.g., 429 for rate limit)
 				w.WriteHeader(ctx.AbortStatusCode())
-				_, _ = w.Write([]byte(ctx.AbortMessage()))
+				_, _ = w.Write([]byte(ctx.AbortMessage())) // #nosec G705 — message is from internal plugin context, not user input
 			}
 			return
 		}

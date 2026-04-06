@@ -50,7 +50,7 @@ VALUES (
 -- Optional: Service-Specific CORS Override
 -- ============================================================================
 -- Uncomment this to test service-scoped plugins
--- This will override global CORS for user-service only
+-- This will override global CORS for example-httpbin only
 
 -- INSERT INTO plugins (name, scope, service_id, config, priority, enabled)
 -- SELECT 
@@ -67,7 +67,7 @@ VALUES (
 --   5,
 --   true
 -- FROM services s
--- WHERE s.name = 'user-service';
+-- WHERE s.name = 'example-httpbin';
 
 -- Show what we created
 SELECT 

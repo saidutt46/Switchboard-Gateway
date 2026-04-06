@@ -129,7 +129,26 @@ services:
       retries: 3
 
   # ============================================================================
-  # Gateway - The Main API Gateway (THIS WAS MISSING!)
+  # Admin UI - React Dashboard for Gateway Management
+  # ============================================================================
+  admin-ui:
+    build:
+      context: ./admin-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    container_name: switchboard-admin-ui
+    depends_on:
+      admin-api:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    networks:
+      - switchboard-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Gateway - The Main API Gateway
   # ============================================================================
   gateway:
     build:

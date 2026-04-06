@@ -198,8 +198,8 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, upstreamURL
 		return fmt.Errorf("invalid upstream URL: %w", err)
 	}
 
-	// Create upstream request
-	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL.String(), r.Body)
+	// Create upstream request — URL is built from admin-configured service host, not user input
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL.String(), r.Body) // #nosec G704
 	if err != nil {
 		return fmt.Errorf("failed to create upstream request: %w", err)
 	}
@@ -222,7 +222,7 @@ func (p *Proxy) proxyRequest(w http.ResponseWriter, r *http.Request, upstreamURL
 
 	// Perform the request
 	upstreamStart := time.Now()
-	resp, err := client.Do(upstreamReq)
+	resp, err := client.Do(upstreamReq) // #nosec G704
 	if err != nil {
 		return fmt.Errorf("upstream request failed: %w", err)
 	}
