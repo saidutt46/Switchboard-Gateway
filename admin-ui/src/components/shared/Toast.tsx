@@ -83,7 +83,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: Toast; onDismiss: () => voi
         'min-w-[340px] max-w-[420px]',
         'transition-all duration-200',
         BORDER_COLORS[t.type],
-        visible && !exiting ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0',
+        visible && !exiting ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0',
       )}
     >
       <Icon className={cn('h-4.5 w-4.5 shrink-0 mt-0.5', ICON_COLORS[t.type])} />
@@ -145,7 +145,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast, toastApiError }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-2">
+      <div className="fixed top-16 right-6 z-[100] flex flex-col gap-2">
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
         ))}
