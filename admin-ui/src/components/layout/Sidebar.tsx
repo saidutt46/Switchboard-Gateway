@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Server, Route, Users, Puzzle, CircleDot, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { LayoutDashboard, Server, Route, Users, Puzzle, CircleDot, PanelLeftClose, PanelLeftOpen, LogOut, UserCircle } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { ThemeToggle } from '../shared/ThemeToggle'
 import { useAdminHealth, useGatewayHealth } from '../../hooks/useHealth'
 import { useSidebar } from '../../hooks/useSidebar'
+import { useAuth } from '../../hooks/useAuth'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', color: 'text-slate-400' },
@@ -11,6 +12,11 @@ const navItems = [
   { to: '/routes', icon: Route, label: 'Routes', color: 'text-teal-400' },
   { to: '/consumers', icon: Users, label: 'Consumers', color: 'text-amber-400' },
   { to: '/plugins', icon: Puzzle, label: 'Plugins', color: 'text-violet-400' },
+]
+
+const settingsItems = [
+  { to: '/settings/users', icon: Users, label: 'Users', color: 'text-orange-400', adminOnly: true },
+  { to: '/settings/profile', icon: UserCircle, label: 'Profile', color: 'text-slate-400', adminOnly: false },
 ]
 
 function SwitchboardIcon({ className }: { className?: string }) {
@@ -35,6 +41,7 @@ function SwitchboardIcon({ className }: { className?: string }) {
 
 export function Sidebar() {
   const { collapsed, toggle } = useSidebar()
+  const { user, logout, isAdmin } = useAuth()
   const { data: adminHealth } = useAdminHealth()
   const { data: gatewayHealth } = useGatewayHealth()
   const isHealthy = adminHealth?.status === 'healthy'
@@ -84,6 +91,40 @@ export function Sidebar() {
             )}
           </NavLink>
         ))}
+
+        {/* Settings */}
+        <div className="mt-4 pt-4 border-t border-white/[0.06]">
+          {!collapsed && (
+            <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/50">
+              Settings
+            </p>
+          )}
+          {settingsItems
+            .filter((item) => !item.adminOnly || isAdmin)
+            .map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                title={collapsed ? item.label : undefined}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center rounded-lg text-[13px] font-medium transition-all duration-150',
+                    collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2',
+                    isActive
+                      ? 'bg-white/[0.1] text-white'
+                      : 'text-sidebar-foreground hover:bg-white/[0.06] hover:text-white'
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <item.icon className={cn('h-4 w-4 shrink-0', isActive ? item.color : 'text-sidebar-foreground')} />
+                    {!collapsed && item.label}
+                  </>
+                )}
+              </NavLink>
+            ))}
+        </div>
       </nav>
 
       {/* Footer */}
@@ -125,6 +166,27 @@ export function Sidebar() {
               </span>
             )}
           </div>
+        </div>
+
+        {/* User + Logout */}
+        <div className={cn('border-t border-white/[0.06] pt-2 mt-1', collapsed ? '' : 'px-1')}>
+          {!collapsed && user && (
+            <div className="px-2 py-1.5 mb-1">
+              <p className="text-[12px] font-medium text-white truncate">{user.username}</p>
+              <p className="text-[10px] text-sidebar-foreground">{user.role}</p>
+            </div>
+          )}
+          <button
+            onClick={logout}
+            title="Sign out"
+            className={cn(
+              'flex items-center rounded-lg text-sidebar-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors w-full',
+              collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="text-[13px] font-medium">Sign out</span>}
+          </button>
         </div>
       </div>
     </aside>

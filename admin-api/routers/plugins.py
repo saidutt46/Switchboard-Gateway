@@ -15,6 +15,7 @@ from models import (
 )
 from schemas import PluginCreate, PluginUpdate, PluginResponse
 from events import publish_plugin_change
+from auth import require_write_access
 
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,8 @@ def validate_plugin_scope(
 @router.post("", response_model=PluginResponse, status_code=status.HTTP_201_CREATED)
 def create_plugin(
     plugin: PluginCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Create a new plugin.
@@ -432,7 +434,8 @@ def get_plugin(
 def update_plugin(
     plugin_id: UUID,
     plugin_update: PluginUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Update a plugin.
@@ -534,7 +537,8 @@ def update_plugin(
 @router.delete("/{plugin_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_plugin(
     plugin_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Delete a plugin.

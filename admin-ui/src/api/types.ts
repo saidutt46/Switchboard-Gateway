@@ -177,6 +177,39 @@ export interface AvailablePlugins {
 }
 
 // ============================================================================
+// Auth
+// ============================================================================
+
+export interface AuthStatus {
+  setup_required: boolean
+}
+
+export interface AuthTokens {
+  access_token: string
+  refresh_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface AdminUser {
+  id: string
+  username: string
+  email: string | null
+  role: 'admin' | 'viewer'
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminUserCreate {
+  username: string
+  password: string
+  email?: string | null
+  role?: string
+}
+
+export type AdminUserUpdate = Partial<Omit<AdminUserCreate, 'username'>>
+
+// ============================================================================
 // Health
 // ============================================================================
 

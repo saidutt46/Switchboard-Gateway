@@ -10,6 +10,7 @@ from database import get_db
 from models import Route as RouteModel, Service as ServiceModel
 from schemas import RouteCreate, RouteUpdate, RouteResponse
 from events import publish_route_change
+from auth import require_write_access
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ router = APIRouter()
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
 def create_route(
     route: RouteCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Create a new route.
@@ -199,7 +201,8 @@ def get_route(
 def update_route(
     route_id: UUID,
     route_update: RouteUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Update a route.
@@ -304,7 +307,8 @@ def update_route(
 @router.delete("/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_route(
     route_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Delete a route.

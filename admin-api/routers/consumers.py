@@ -12,6 +12,7 @@ from datetime import datetime
 from database import get_db
 from models import Consumer as ConsumerModel, APIKey as APIKeyModel
 from schemas import ConsumerCreate, ConsumerUpdate, ConsumerResponse
+from auth import require_write_access
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,8 @@ router = APIRouter()
 @router.post("", response_model=ConsumerResponse, status_code=status.HTTP_201_CREATED)
 def create_consumer(
     consumer: ConsumerCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Create a new consumer.
@@ -154,7 +156,8 @@ def get_consumer(
 def update_consumer(
     consumer_id: UUID,
     consumer_update: ConsumerUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Update a consumer.
@@ -235,7 +238,8 @@ def update_consumer(
 @router.delete("/{consumer_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_consumer(
     consumer_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Delete a consumer.
@@ -325,7 +329,8 @@ def generate_api_key(environment: str = "prod") -> tuple[str, str]:
 def create_api_key(
     consumer_id: UUID,
     name: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Generate a new API key for a consumer.
@@ -464,7 +469,8 @@ def list_api_keys(
 def revoke_api_key(
     consumer_id: UUID,
     key_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Revoke (delete) an API key.
@@ -538,7 +544,8 @@ def revoke_api_key(
 def disable_api_key(
     consumer_id: UUID,
     key_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Disable an API key (without deleting it).
@@ -606,7 +613,8 @@ def disable_api_key(
 def enable_api_key(
     consumer_id: UUID,
     key_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _writer=Depends(require_write_access)
 ):
     """
     Re-enable a previously disabled API key.
