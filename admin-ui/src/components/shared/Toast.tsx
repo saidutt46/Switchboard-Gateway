@@ -79,7 +79,9 @@ function ToastItem({ toast: t, onDismiss }: { toast: Toast; onDismiss: () => voi
   return (
     <div
       className={cn(
-        'flex gap-3 rounded-lg border border-l-[3px] bg-card px-4 py-3 shadow-lg backdrop-blur-sm',
+        'flex gap-3 rounded-lg border border-l-[3px] bg-card px-4 py-3.5 backdrop-blur-sm',
+        'shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)]',
+        'ring-1 ring-black/[0.04] dark:ring-white/[0.06]',
         'min-w-[340px] max-w-[420px]',
         'transition-all duration-200',
         BORDER_COLORS[t.type],
@@ -103,7 +105,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: Toast; onDismiss: () => voi
       </div>
       <button
         onClick={handleDismiss}
-        className="shrink-0 rounded-md p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        className="shrink-0 rounded-md p-1.5 -mr-1 -mt-0.5 text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
       >
         <X className="h-3.5 w-3.5" />
       </button>
