@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Server, Route, Users, Puzzle, CircleDot, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { LayoutDashboard, Server, Route, Users, Puzzle, CircleDot, PanelLeftClose, PanelLeftOpen, LogOut } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { ThemeToggle } from '../shared/ThemeToggle'
 import { useAdminHealth, useGatewayHealth } from '../../hooks/useHealth'
 import { useSidebar } from '../../hooks/useSidebar'
+import { useAuth } from '../../hooks/useAuth'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', color: 'text-slate-400' },
@@ -35,6 +36,7 @@ function SwitchboardIcon({ className }: { className?: string }) {
 
 export function Sidebar() {
   const { collapsed, toggle } = useSidebar()
+  const { user, logout } = useAuth()
   const { data: adminHealth } = useAdminHealth()
   const { data: gatewayHealth } = useGatewayHealth()
   const isHealthy = adminHealth?.status === 'healthy'
@@ -125,6 +127,27 @@ export function Sidebar() {
               </span>
             )}
           </div>
+        </div>
+
+        {/* User + Logout */}
+        <div className={cn('border-t border-white/[0.06] pt-2 mt-1', collapsed ? '' : 'px-1')}>
+          {!collapsed && user && (
+            <div className="px-2 py-1.5 mb-1">
+              <p className="text-[12px] font-medium text-white truncate">{user.username}</p>
+              <p className="text-[10px] text-sidebar-foreground">{user.role}</p>
+            </div>
+          )}
+          <button
+            onClick={logout}
+            title="Sign out"
+            className={cn(
+              'flex items-center rounded-lg text-sidebar-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors w-full',
+              collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="text-[13px] font-medium">Sign out</span>}
+          </button>
         </div>
       </div>
     </aside>

@@ -2,6 +2,11 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppShell } from './components/layout/AppShell'
 import { ToastProvider } from './components/shared/Toast'
+import { AuthProvider } from './hooks/useAuth'
+import { AuthGuard } from './components/auth/AuthGuard'
+import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { LoginPage } from './pages/LoginPage'
+import { SetupPage } from './pages/SetupPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ServicesPage } from './pages/ServicesPage'
 import { ServiceDetailPage } from './pages/ServiceDetailPage'
@@ -26,22 +31,35 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/services" element={<ServicesPage />} />
-              <Route path="/services/:id" element={<ServiceDetailPage />} />
-              <Route path="/routes" element={<RoutesPage />} />
-              <Route path="/routes/:id" element={<RouteDetailPage />} />
-              <Route path="/consumers" element={<ConsumersPage />} />
-              <Route path="/consumers/:id" element={<ConsumerDetailPage />} />
-              <Route path="/plugins" element={<PluginsPage />} />
-              <Route path="/plugins/:id" element={<PluginDetailPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <AuthProvider>
+          <BrowserRouter>
+            <AuthGuard>
+              <Routes>
+                {/* Public auth pages */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/setup" element={<SetupPage />} />
+
+                {/* Protected app — requires authentication */}
+                <Route element={
+                  <ProtectedRoute>
+                    <AppShell />
+                  </ProtectedRoute>
+                }>
+                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/services" element={<ServicesPage />} />
+                  <Route path="/services/:id" element={<ServiceDetailPage />} />
+                  <Route path="/routes" element={<RoutesPage />} />
+                  <Route path="/routes/:id" element={<RouteDetailPage />} />
+                  <Route path="/consumers" element={<ConsumersPage />} />
+                  <Route path="/consumers/:id" element={<ConsumerDetailPage />} />
+                  <Route path="/plugins" element={<PluginsPage />} />
+                  <Route path="/plugins/:id" element={<PluginDetailPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Route>
+              </Routes>
+            </AuthGuard>
+          </BrowserRouter>
+        </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>
   )
