@@ -10,6 +10,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Prometheus metrics endpoints
 - Circuit breaker plugin
+
+## [0.8.1] - 2026-04-06
+
+### Added
+- **Admin Authentication**: JWT-based auth for all admin API endpoints
+  - Username/password login with bcrypt hashing
+  - Access tokens (15 min) + refresh tokens (7 days) with auto-refresh
+  - Login rate limiting (5 attempts/min/IP, 15 min lockout)
+  - First-run setup page to create initial admin account
+  - Env var seeding (`ADMIN_USER`, `ADMIN_PASSWORD`) for Docker deployments
+- **User Management**: admin-only user CRUD
+  - Create users with admin or viewer role
+  - Admins: full access. Viewers: read-only (cannot create/edit/delete entities)
+  - Last-admin protection (cannot delete or demote the last admin)
+  - Profile page for changing own email/password
+- **Auth UI**: login page, setup page, protected routes
+  - Setup wizard with password strength indicators
+  - Auth guard redirects unauthenticated users to login
+  - Sidebar shows logged-in user, role, and sign out button
+  - Settings section with Users (admin-only) and Profile pages
+
+### Changed
+- All admin API CRUD endpoints now require JWT authentication
+- `/health` and `/auth/*` endpoints remain public
 - WebSocket support
 
 ---

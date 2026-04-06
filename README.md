@@ -404,6 +404,7 @@ Real benchmarks from load testing:
 | 🔌 **Plugin System** | Extensible architecture for custom logic |
 | 📊 **Structured Logging** | JSON logs with request tracing |
 | 🖥️ **Admin Dashboard** | React UI for visual gateway management |
+| 🔒 **Admin Auth** | JWT login with role-based access (admin/viewer) |
 
 ---
 
