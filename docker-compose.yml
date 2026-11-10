@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: switchboard
       POSTGRES_PASSWORD: switchboard_dev_password
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
@@ -19,6 +19,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
       - switchboard-network
 
@@ -30,7 +31,7 @@ services:
     container_name: switchboard-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -38,6 +39,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
     networks:
       - switchboard-network
 
@@ -45,6 +47,7 @@ services:
   # Zookeeper - Kafka Dependency
   # ============================================================================
   zookeeper:
+    profiles: ["logging"]  # opt-in: docker compose --profile logging up -d
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: switchboard-zookeeper
     environment:
@@ -57,12 +60,13 @@ services:
   # Kafka - Event Streaming (Request Logs)
   # ============================================================================
   kafka:
+    profiles: ["logging"]  # opt-in: docker compose --profile logging up -d
     image: confluentinc/cp-kafka:7.5.0
     container_name: switchboard-kafka
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -86,7 +90,7 @@ services:
     image: mccutchen/go-httpbin:v2.13.4
     container_name: switchboard-demo-backend
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     environment:
       - MAX_DURATION=10s
       - MAX_BODY_SIZE=1048576
@@ -95,6 +99,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
     networks:
       - switchboard-network
   
@@ -112,7 +117,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql://switchboard:switchboard_dev_password@postgres:5432/switchboard
       - REDIS_URL=redis://redis:6379/0
@@ -123,6 +128,7 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     volumes:
       - ./admin-api:/app
+    restart: unless-stopped
     networks:
       - switchboard-network
     healthcheck:
@@ -145,7 +151,7 @@ services:
       admin-api:
         condition: service_healthy
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     networks:
       - switchboard-network
     restart: unless-stopped
@@ -170,7 +176,7 @@ services:
       admin-api:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - POSTGRES_DSN=postgresql://switchboard:switchboard_dev_password@postgres:5432/switchboard?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
