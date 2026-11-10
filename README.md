@@ -553,8 +553,14 @@ Switchboard uses a **3-package architecture** for optimal performance and scalin
 
 **Option 1: Docker Compose (Recommended for Development/Testing)**
 ```bash
-# Start full stack
-docker-compose up -d
+# Start the core stack (postgres, redis, admin-api, admin-ui, gateway, demo backend)
+docker compose up -d
+
+# Optional: also start Kafka + Zookeeper (request-log streaming, ~1 GB RAM)
+docker compose --profile logging up -d
+
+# All ports are published on 127.0.0.1 only. Reach them from another
+# machine with an SSH tunnel, e.g. ssh -L 4000:127.0.0.1:4000 <host>
 
 # View logs
 docker-compose logs -f gateway
